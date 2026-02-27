@@ -23,7 +23,7 @@ Astro 5 static site deployed to Cloudflare Pages. All output is pre-rendered (`o
 
 ### Layout & Navigation
 
-`src/layouts/Layout.astro` is the single shared layout for every page. It renders a persistent left sidebar with nav links (About, Posts, Photography, Newsletter), a user popover with social links and theme toggle, and a mobile top bar. All pages pass `currentPage` to this layout to drive `aria-current` on nav items.
+`src/layouts/Layout.astro` is the single shared layout for every page. It renders a persistent left sidebar with nav links driven by `siteConfig.nav`, a user popover with social links and theme toggle, and a mobile top bar. All pages pass `currentPage` to this layout to drive `aria-current` on nav items. Identity and nav items are configured in `src/site.config.ts`.
 
 ### Styling
 
@@ -43,7 +43,7 @@ Toggled by adding/removing the `.dark` class on `<html>`. The current state is p
 
 ### Content
 
-Blog posts live in `src/content/posts/` as `.md` or `.mdx`. The content collection schema (`src/content.config.ts`) requires `title`, `description`, and `date`; `tags` is optional. Slugs are derived from filenames via the glob loader — the `post.id` is the slug used in `getStaticPaths`.
+Blog posts live in `src/content/posts/` as `.md` or `.mdx`. Projects live in `src/content/projects/` as `.md`. Both use the glob loader and have schemas defined in `src/content.config.ts`. Posts require `title`, `description`, and `date`; `tags` is optional. Projects require `title` and `description`; `featured`, `status`, `tags`, `github`, `url`, and `date` are optional. Slugs for posts are derived from filenames — the `post.id` is used in `getStaticPaths`.
 
 ### Code Highlighting
 
@@ -51,7 +51,7 @@ Blog posts live in `src/content/posts/` as `.md` or `.mdx`. The content collecti
 
 ### Analytics
 
-Self-hosted Rybbit analytics loaded via `@astrojs/partytown` (offloaded to a web worker). The script tag uses `type="text/partytown"`.
+Optional analytics loaded via `@astrojs/partytown` (offloaded to a web worker). Disabled by default. Enable by setting `siteConfig.analytics.enabled = true` and providing `analytics.url` and `analytics.domain`. The script tag uses `type="text/partytown"`.
 
 ### Utilities
 
