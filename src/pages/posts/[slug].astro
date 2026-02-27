@@ -1,0 +1,160 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { getCollection, render } from "astro:content";
+import BackToTop from "../../components/ui/BackToTop.astro";
+import Layout from "../../layouts/Layout.astro";
+import { formatDate, readingTime } from "../../utils";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("posts");
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+
+interface Props {
+  post: CollectionEntry<"posts">;
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+
+// rawContent() is only available for md/mdx entries via the glob loader
+const bodyText = post.body ?? "";
+const timeToRead = readingTime(bodyText);
+---
+
+<Layout
+  title={post.data.title}
+  description={post.data.description}
+  currentPage={`/posts/${post.id}`}
+>
+  <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
+    <!-- Back link -->
+    <a
+      href="/posts"
+      class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m12 19-7-7 7-7" />
+        <path d="M19 12H5" />
+      </svg>
+      All posts
+    </a>
+
+    <!-- Post header -->
+    <header class="mb-8">
+      <h1
+        class="text-3xl font-bold tracking-tight text-foreground leading-tight mb-3"
+      >
+        {post.data.title}
+      </h1>
+      <p class="text-muted-foreground leading-relaxed mb-4">
+        {post.data.description}
+      </p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <time
+          datetime={post.data.date.toISOString()}
+          class="text-sm text-muted-foreground"
+        >
+          {formatDate(post.data.date)}
+        </time>
+        <span class="text-border" aria-hidden="true">·</span>
+        <span class="text-sm text-muted-foreground">{timeToRead}</span>
+        {post.data.tags && post.data.tags.length > 0 && (
+          <>
+            <span class="text-border" aria-hidden="true">·</span>
+            <div class="flex gap-1.5 flex-wrap">
+              {post.data.tags.map((tag) => (
+                <span class="badge-outline text-xs">{tag}</span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </header>
+
+    <div role="separator" class="border-t border-border mb-8"></div>
+
+    <!-- Post body -->
+    <div class="prose prose-sm prose-neutral dark:prose-invert max-w-none">
+      <Content />
+    </div>
+
+    <div role="separator" class="border-t border-border mt-12 mb-8"></div>
+
+    <!-- Footer nav -->
+    <a
+      href="/posts"
+      class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m12 19-7-7 7-7" />
+        <path d="M19 12H5" />
+      </svg>
+      Back to all posts
+    </a>
+  </div>
+
+  <BackToTop />
+</Layout>
+
+<style is:global>
+  @reference "../../styles/global.css";
+
+  .prose h2 {
+    @apply text-xl font-semibold text-foreground mt-8 mb-3;
+  }
+  .prose h3 {
+    @apply text-base font-semibold text-foreground mt-6 mb-2;
+  }
+  .prose p {
+    @apply text-sm text-muted-foreground leading-relaxed mb-4;
+  }
+  .prose ul {
+    @apply text-sm text-muted-foreground list-disc pl-5 mb-4 space-y-1;
+  }
+  .prose ol {
+    @apply text-sm text-muted-foreground list-decimal pl-5 mb-4 space-y-1;
+  }
+  .prose strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose a {
+    @apply text-foreground underline underline-offset-4 hover:text-muted-foreground transition-colors;
+  }
+  .prose blockquote {
+    @apply border-l-2 border-border pl-4 italic text-muted-foreground;
+  }
+
+  /* Expressive Code block overrides — harmonize with prose sizing */
+  .prose .expressive-code {
+    @apply mb-4;
+  }
+  .prose .expressive-code pre {
+    @apply text-xs;
+  }
+</style>

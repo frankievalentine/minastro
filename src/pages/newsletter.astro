@@ -1,0 +1,295 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { siteConfig } from "../site.config";
+---
+
+<Layout title="Newsletter" currentPage="/newsletter">
+  <div class="max-w-lg mx-auto px-6 py-12 md:py-16">
+    <!-- Page header -->
+    <div class="flex items-center gap-2 mb-3">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="text-muted-foreground"
+        aria-hidden="true"
+      >
+        <rect width="20" height="16" x="2" y="4" rx="2" />
+        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+      </svg>
+      <span
+        class="text-xs text-muted-foreground font-medium uppercase tracking-wider"
+        >Newsletter</span
+      >
+    </div>
+
+    <!-- Subscribe card -->
+    <div class="card">
+      <header>
+        <h1>Stay in the loop</h1>
+        <p>
+          {siteConfig.newsletter.description ?? "Occasional notes on engineering, projects, and ideas. No spam."}
+        </p>
+      </header>
+      <section>
+        <!-- Subscriber count pill -->
+        <div class="flex items-center gap-2 mb-5">
+          <div class="flex -space-x-2">
+            <img
+              class="size-6 rounded-full ring-2 ring-background object-cover"
+              src="https://picsum.photos/seed/sub1/40/40"
+              alt=""
+              aria-hidden="true"
+            >
+            <img
+              class="size-6 rounded-full ring-2 ring-background object-cover"
+              src="https://picsum.photos/seed/sub2/40/40"
+              alt=""
+              aria-hidden="true"
+            >
+            <img
+              class="size-6 rounded-full ring-2 ring-background object-cover"
+              src="https://picsum.photos/seed/sub3/40/40"
+              alt=""
+              aria-hidden="true"
+            >
+          </div>
+          <p class="text-xs text-muted-foreground">Join 240+ readers</p>
+        </div>
+
+        <!-- Form -->
+        <form id="newsletter-form" class="grid gap-4" novalidate data-form-url={siteConfig.newsletter.formUrl ?? ""}>
+          <div class="grid gap-2">
+            <label for="newsletter-name" class="label">Name</label>
+            <input
+              id="newsletter-name"
+              class="input"
+              type="text"
+              placeholder="Your name"
+              autocomplete="given-name"
+            >
+          </div>
+          <div class="grid gap-2">
+            <label for="newsletter-email" class="label">
+              Email <span class="text-destructive" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="newsletter-email"
+              class="input"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="email"
+              required
+            >
+          </div>
+          <button type="submit" class="btn w-full">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22l-4-9-9-4 20-7z" />
+            </svg>
+            Subscribe
+          </button>
+          <p class="text-xs text-muted-foreground text-center">
+            No spam, ever. Unsubscribe at any time.
+          </p>
+        </form>
+
+        <!-- Success state -->
+        <div id="newsletter-success" class="text-center py-4" hidden>
+          <div
+            class="inline-flex size-12 items-center justify-center rounded-full bg-secondary mb-4"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-secondary-foreground"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <h3 class="font-semibold text-foreground mb-1">You're in</h3>
+          <p class="text-sm text-muted-foreground">
+            Thanks for subscribing. Check your inbox for a confirmation.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <!-- What to expect section -->
+    <div class="card mt-6">
+      <header>
+        <h2>What to expect</h2>
+      </header>
+      <section>
+        <ul class="space-y-3">
+          <li class="flex items-start gap-3">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-muted-foreground shrink-0 mt-0.5"
+              aria-hidden="true"
+            >
+              <path
+                d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+              />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+            <div>
+              <p class="text-sm font-medium text-foreground">Behind the lens</p>
+              <p class="text-xs text-muted-foreground mt-0.5">
+                Notes on technique, gear decisions, and the thinking behind a
+                shot.
+              </p>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-muted-foreground shrink-0 mt-0.5"
+              aria-hidden="true"
+            >
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+            <div>
+              <p class="text-sm font-medium text-foreground">
+                What I'm building
+              </p>
+              <p class="text-xs text-muted-foreground mt-0.5">
+                Updates on open-source work, side projects, and things I find
+                interesting.
+              </p>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-muted-foreground shrink-0 mt-0.5"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <div>
+              <p class="text-sm font-medium text-foreground">Cadence</p>
+              <p class="text-xs text-muted-foreground mt-0.5">
+                Roughly twice a month. Never more than that.
+              </p>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  const form = document.getElementById(
+    "newsletter-form"
+  ) as HTMLFormElement | null;
+  const success = document.getElementById("newsletter-success");
+  const emailInput = document.getElementById(
+    "newsletter-email"
+  ) as HTMLInputElement | null;
+  const nameInput = document.getElementById(
+    "newsletter-name"
+  ) as HTMLInputElement | null;
+  const submitBtn = form?.querySelector(
+    'button[type="submit"]'
+  ) as HTMLButtonElement | null;
+
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    if (!(emailInput?.value && emailInput.checkValidity())) {
+      emailInput?.setAttribute("aria-invalid", "true");
+      emailInput?.focus();
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Subscribing…";
+    }
+
+    try {
+      const body = new URLSearchParams({ email: emailInput.value });
+      if (nameInput?.value) {
+        body.set("name", nameInput.value);
+      }
+
+      const formUrl = document.getElementById("newsletter-form")?.dataset.formUrl ?? "";
+      const res = await fetch(formUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+
+      if (!res.ok) {
+        throw new Error("Request failed");
+      }
+
+      form.setAttribute("hidden", "");
+      success?.removeAttribute("hidden");
+    } catch {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Subscribe";
+      }
+      // Surface a basic error without a full error UI
+      emailInput?.setAttribute("aria-invalid", "true");
+    }
+  });
+
+  emailInput?.addEventListener("input", () => {
+    emailInput.removeAttribute("aria-invalid");
+  });
+</script>

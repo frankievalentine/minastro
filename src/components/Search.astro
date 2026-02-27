@@ -1,0 +1,170 @@
+<!-- Search dialog using basecoat command-dialog pattern + Pagefind headless API -->
+<dialog
+  id="search-dialog"
+  class="command-dialog"
+  aria-label="Search pages and posts"
+  onclick="if(event.target===this)this.close()"
+>
+  <div class="command">
+    <header>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Search pages and posts..."
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        aria-autocomplete="list"
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="search-menu"
+      >
+    </header>
+    <div
+      role="menu"
+      id="search-menu"
+      data-empty="No results found."
+      class="scrollbar"
+    ><!-- Pagefind results injected here --></div>
+  </div>
+</dialog>
+
+<style is:global>
+  @reference "../styles/global.css";
+
+  /* Allow multi-line result items — override the command component's truncate default */
+  #search-dialog [role="menu"] [role="menuitem"] {
+    @apply whitespace-normal overflow-visible items-start h-auto;
+  }
+</style>
+
+<script>
+  let pagefind: any = null;
+
+  const getDialog = () =>
+    document.getElementById("search-dialog") as HTMLDialogElement | null;
+  const getInput = () =>
+    document.getElementById("search-input") as HTMLInputElement | null;
+  const getMenu = () =>
+    document.getElementById("search-menu") as HTMLElement | null;
+
+  // Lazy-load Pagefind on first open
+  const ensurePagefind = async () => {
+    if (pagefind) {
+      return;
+    }
+    try {
+      pagefind = await import("/pagefind/pagefind.js");
+      await pagefind.init();
+    } catch {
+      console.warn("Pagefind index not found. Run `bun run build` first.");
+    }
+  };
+
+  const openSearch = async () => {
+    const dialog = getDialog();
+    if (!dialog) {
+      return;
+    }
+    dialog.showModal();
+    getInput()?.focus();
+    await ensurePagefind();
+  };
+
+  const renderResults = (items: any[]) => {
+    const menu = getMenu();
+    if (!menu) {
+      return;
+    }
+
+    if (items.length === 0) {
+      menu.innerHTML = "";
+      window.basecoat?.init("command");
+      return;
+    }
+
+    menu.innerHTML = items
+      .map((item) => {
+        const title = item.meta?.title ?? "Untitled";
+        // Strip <mark> tags from excerpt for the sub-text (keep plain text)
+        const excerpt = item.excerpt.replace(/<\/?mark>/g, "");
+        return `
+          <a role="menuitem" href="${item.url}" data-force class="flex-col gap-0.5 !items-start !h-auto !whitespace-normal">
+            <span class="font-medium leading-snug">${title}</span>
+            <span class="text-xs text-muted-foreground leading-snug line-clamp-2">${excerpt}</span>
+          </a>
+        `;
+      })
+      .join("");
+
+    // Re-init command component so keyboard navigation works on fresh items
+    window.basecoat?.init("command");
+  };
+
+  // Re-attach element listeners on each page load (elements are replaced by View Transitions)
+  document.addEventListener("astro:page-load", () => {
+    const input = getInput();
+    const menu = getMenu();
+    if (!(input && menu)) {
+      return;
+    }
+
+    // Reset state for the new page
+    input.value = "";
+    menu.innerHTML = "";
+
+    input.addEventListener("input", async () => {
+      const query = input.value.trim();
+      if (!query) {
+        menu.innerHTML = "";
+        return;
+      }
+
+      await ensurePagefind();
+      if (!pagefind) {
+        return;
+      }
+
+      const result = await pagefind.debouncedSearch(query, {}, 200);
+      if (!result) {
+        return; // superseded by a newer debounced call
+      }
+
+      const data = await Promise.all(
+        result.results.slice(0, 8).map((r: any) => r.data())
+      );
+      renderResults(data);
+    });
+  });
+
+  // CMD+K / CTRL+K — on document so it survives body swaps
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      const dialog = getDialog();
+      if (dialog?.open) {
+        dialog.close();
+      } else {
+        openSearch();
+      }
+    }
+  });
+
+  // Close the dialog before navigating so it doesn't animate open during the transition
+  document.addEventListener("astro:before-preparation", () => {
+    getDialog()?.close();
+  });
+</script>

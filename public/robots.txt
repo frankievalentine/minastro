@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Keep pagefind assets out of the index — they're JS/data, not content
+Disallow: /pagefind/
+
+Sitemap: https://v3frankie.me/sitemap-index.xml

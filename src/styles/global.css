@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "basecoat-css";
+
+/* Expand the sidebar footer tap area to the full available space. */
+.sidebar nav > footer {
+  padding: 0;
+}

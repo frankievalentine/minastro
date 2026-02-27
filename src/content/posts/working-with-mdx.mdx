@@ -1,0 +1,43 @@
+---
+title: Writing Posts with MDX
+description: MDX lets you use components inside your Markdown. Here's a quick demonstration of what that looks like.
+date: 2025-02-01
+tags: [mdx, components, astro]
+---
+
+MDX is a superset of Markdown that lets you embed JSX components inline. This is useful for interactive demos, custom callouts, or anything that needs more structure than plain prose.
+
+## A simple inline component
+
+You can import and use Astro components directly in `.mdx` files:
+
+```mdx
+import MyComponent from "../../components/MyComponent.astro";
+
+<MyComponent message="Hello from MDX" />
+```
+
+## Expressive Code
+
+This template ships with [Expressive Code](https://expressive-code.com/) for syntax-highlighted code blocks with copy buttons, line numbers, and diff highlighting.
+
+```typescript title="utils.ts"
+export function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+```
+
+```diff lang="ts"
+- const old = "value";
++ const updated = "new value";
+```
+
+## When to use MDX vs Markdown
+
+Use plain `.md` files for posts that are entirely prose — no components needed. Reach for `.mdx` when you want to drop in an interactive element, a custom callout card, or a structured data visualization.
+
+Both file types are supported in `src/content/posts/` and are picked up automatically by the content collection.
