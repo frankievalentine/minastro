@@ -1,7 +1,7 @@
 {
-  "name": "v3frankie.me",
-  "short_name": "FV_site",
-  "description": "Frankie Valentine's personal site.",
+  "name": "minastro",
+  "short_name": "minastro",
+  "description": "A minimal Astro personal site template.",
   "icons": [
     {
       "src": "/192x192.png",
