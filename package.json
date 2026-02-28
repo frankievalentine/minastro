@@ -3,7 +3,13 @@
   "type": "module",
   "version": "0.1.0",
   "description": "A minimal Astro personal site template with blog, projects, newsletter, and search.",
-  "keywords": ["astro", "astro-template", "blog", "portfolio", "tailwind"],
+  "keywords": [
+    "astro",
+    "astro-template",
+    "blog",
+    "portfolio",
+    "tailwind"
+  ],
   "scripts": {
     "dev": "astro dev",
     "build": "astro telemetry disable && astro build",

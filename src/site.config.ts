@@ -1,29 +1,29 @@
 export interface SiteConfig {
-  name: string;
-  title: string;
-  description: string;
-  url: string;
+  analytics: {
+    enabled: boolean;
+    url?: string;
+    domain?: string;
+  };
   avatar: string;
-  location: string;
-  roles: string[];
   bio: string;
+  description: string;
+  location: string;
+  name: string;
+  nav: Array<{ label: string; href: string }>;
+  newsletter: {
+    enabled: boolean;
+    formUrl?: string;
+    description?: string;
+  };
+  roles: string[];
   social: {
     github?: string;
     twitter?: string;
     linkedin?: string;
     email?: string;
   };
-  newsletter: {
-    enabled: boolean;
-    formUrl?: string;
-    description?: string;
-  };
-  analytics: {
-    enabled: boolean;
-    url?: string;
-    domain?: string;
-  };
-  nav: Array<{ label: string; href: string }>;
+  title: string;
+  url: string;
 }
 
 export const siteConfig: SiteConfig = {
@@ -43,7 +43,8 @@ export const siteConfig: SiteConfig = {
   newsletter: {
     enabled: true,
     formUrl: "https://your-newsletter-service.com/subscribe",
-    description: "Occasional notes on engineering, projects, and ideas. No spam.",
+    description:
+      "Occasional notes on engineering, projects, and ideas. No spam.",
   },
   analytics: {
     enabled: false,

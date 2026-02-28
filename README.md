@@ -152,6 +152,17 @@ bun run cfdeploy
 
 Or connect your GitHub repo in the Cloudflare Pages dashboard and set the build command to `bun run build` and the output directory to `dist`.
 
+### Docker
+
+A `Dockerfile` is included for self-hosted deployments. It builds the static site with Bun and serves it via nginx:
+
+```bash
+docker build -t minastro .
+docker run -p 8080:80 minastro
+```
+
+The site will be available at `http://localhost:8080`. The image uses a multi-stage build — the Bun builder stage produces `./dist/`, and the nginx stage serves it with no runtime dependencies.
+
 ### Switching adapters
 
 To deploy to Vercel, Netlify, or Node.js, swap out the adapter in `astro.config.mjs`. See the [Astro adapters docs](https://docs.astro.build/en/guides/on-demand-rendering/) for details. Remove `wrangler.jsonc` and `@astrojs/cloudflare` from `package.json` if you switch.

@@ -1,5 +1,5 @@
 ---
-title: Getting Started with This Template
+title: Getting Started with minastro
 description: A quick overview of what's included in this Astro starter and how to make it your own.
 date: 2025-01-15
 tags: [astro, template, guide]

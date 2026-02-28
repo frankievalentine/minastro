@@ -64,7 +64,12 @@ import { siteConfig } from "../site.config";
         </div>
 
         <!-- Form -->
-        <form id="newsletter-form" class="grid gap-4" novalidate data-form-url={siteConfig.newsletter.formUrl ?? ""}>
+        <form
+          id="newsletter-form"
+          class="grid gap-4"
+          novalidate
+          data-form-url={siteConfig.newsletter.formUrl ?? ""}
+        >
           <div class="grid gap-2">
             <label for="newsletter-name" class="label">Name</label>
             <input
@@ -266,7 +271,8 @@ import { siteConfig } from "../site.config";
         body.set("name", nameInput.value);
       }
 
-      const formUrl = document.getElementById("newsletter-form")?.dataset.formUrl ?? "";
+      const formUrl =
+        document.getElementById("newsletter-form")?.dataset.formUrl ?? "";
       const res = await fetch(formUrl, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

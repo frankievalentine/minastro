@@ -5,32 +5,34 @@ import Search from "../components/Search.astro";
 import { siteConfig } from "../site.config";
 
 interface Props {
-    title?: string;
-    description?: string;
-    currentPage?: string;
+  currentPage?: string;
+  description?: string;
+  title?: string;
 }
 
 const {
-    title = siteConfig.title,
-    description = siteConfig.description,
-    currentPage = "/",
+  title = siteConfig.title,
+  description = siteConfig.description,
+  currentPage = "/",
 } = Astro.props;
 
 const siteTitle =
-    title === siteConfig.title ? title : `${title} • ${siteConfig.title}`;
+  title === siteConfig.title ? title : `${title} • ${siteConfig.title}`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
 // Nav icon paths keyed by href
 const navIcons: Record<string, string> = {
-    "/": `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
-    "/posts": `<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>`,
-    "/projects": `<path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path>`,
-    "/newsletter": `<rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>`,
+  "/": `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
+  "/posts": `<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>`,
+  "/projects": `<path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path>`,
+  "/newsletter": `<rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>`,
 };
 
 function isActive(href: string): boolean {
-    if (href === "/") return currentPage === "/";
-    return currentPage === href || currentPage.startsWith(`${href}/`);
+  if (href === "/") {
+    return currentPage === "/";
+  }
+  return currentPage === href || currentPage.startsWith(`${href}/`);
 }
 
 const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
@@ -38,62 +40,62 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
 
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="generator" content={Astro.generator} />
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="generator" content={Astro.generator}>
 
-        <!-- Primary meta -->
-        <title>{siteTitle}</title>
-        <meta name="title" content={siteTitle} />
-        <meta name="description" content={description} />
-        <meta name="author" content={siteConfig.name} />
-        <link rel="canonical" href={canonicalURL} />
+    <!-- Primary meta -->
+    <title>{siteTitle}</title>
+    <meta name="title" content={siteTitle}>
+    <meta name="description" content={description}>
+    <meta name="author" content={siteConfig.name}>
+    <link rel="canonical" href={canonicalURL}>
 
-        <!-- Icons -->
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Icons -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
 
-        <!-- Open Graph -->
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content={canonicalURL} />
-        <meta property="og:title" content={siteTitle} />
-        <meta property="og:description" content={description} />
-        <meta property="og:site_name" content={siteConfig.title} />
-        <meta property="og:locale" content="en_US" />
-        <meta property="article:author" content={siteConfig.name} />
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content={canonicalURL}>
+    <meta property="og:title" content={siteTitle}>
+    <meta property="og:description" content={description}>
+    <meta property="og:site_name" content={siteConfig.title}>
+    <meta property="og:locale" content="en_US">
+    <meta property="article:author" content={siteConfig.name}>
 
-        <!-- Twitter Card -->
-        <meta property="twitter:card" content="summary_large_image" />
-        <meta property="twitter:url" content={canonicalURL} />
-        <meta property="twitter:title" content={siteTitle} />
-        <meta property="twitter:description" content={description} />
+    <!-- Twitter Card -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content={canonicalURL}>
+    <meta property="twitter:title" content={siteTitle}>
+    <meta property="twitter:description" content={description}>
 
-        <!-- Theme color -->
-        <meta
-            name="theme-color"
-            content="#ffffff"
-            media="(prefers-color-scheme: light)"
-        />
-        <meta
-            name="theme-color"
-            content="#1d1f21"
-            media="(prefers-color-scheme: dark)"
-        />
+    <!-- Theme color -->
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    >
+    <meta
+      name="theme-color"
+      content="#1d1f21"
+      media="(prefers-color-scheme: dark)"
+    >
 
-        <!-- Sitemap + RSS -->
-        <link rel="sitemap" href="/sitemap-index.xml" />
-        <link
-            rel="alternate"
-            type="application/rss+xml"
-            title={siteConfig.title}
-            href="/rss.xml"
-        />
+    <!-- Sitemap + RSS -->
+    <link rel="sitemap" href="/sitemap-index.xml">
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={siteConfig.title}
+      href="/rss.xml"
+    >
 
-        <!-- Analytics (via Partytown) — only rendered when analytics.enabled is true -->
-        {siteConfig.analytics.enabled && siteConfig.analytics.url && (
+    <!-- Analytics (via Partytown) — only rendered when analytics.enabled is true -->
+    {siteConfig.analytics.enabled && siteConfig.analytics.url && (
             <script
                 is:inline
                 defer
@@ -103,59 +105,57 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
             />
         )}
 
-        <ClientRouter />
-        <script is:inline>
-            if (
-                localStorage.theme === "dark" ||
-                (!("theme" in localStorage) &&
-                    window.matchMedia("(prefers-color-scheme: dark)").matches)
-            ) {
-                document.documentElement.classList.add("dark");
-            }
-        </script>
-    </head>
-    <body class="min-h-svh bg-background text-foreground antialiased">
-        <Search />
+    <ClientRouter />
+    <script is:inline>
+      if (
+        localStorage.theme === "dark" ||
+        (!("theme" in localStorage) &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
+  </head>
+  <body class="min-h-svh bg-background text-foreground antialiased">
+    <Search />
 
-        <aside class="sidebar" data-side="left" data-pagefind-ignore>
-            <nav>
-                <section class="scrollbar">
-                    <!-- Search trigger -->
-                    <div class="px-2 pt-2">
-                        <button
-                            id="search-trigger"
-                            type="button"
-                            aria-label="Search"
-                            class="flex w-full items-center gap-2 rounded-md h-8 px-2 text-sm text-muted-foreground bg-sidebar-accent/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border border-sidebar-border transition-colors"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="13"
-                                height="13"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                class="shrink-0"
-                                aria-hidden="true"
-                            >
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <path d="m21 21-4.3-4.3"></path>
-                            </svg>
-                            <span class="flex-1 text-left text-xs"
-                                >Search...</span
-                            >
-                            <span class="kbd hidden sm:inline-flex">
-                                <span>⌘</span><span>K</span>
-                            </span>
-                        </button>
-                    </div>
+    <aside class="sidebar" data-side="left" data-pagefind-ignore>
+      <nav>
+        <section class="scrollbar">
+          <!-- Search trigger -->
+          <div class="px-2 pt-2">
+            <button
+              id="search-trigger"
+              type="button"
+              aria-label="Search"
+              class="flex w-full items-center gap-2 rounded-md h-8 px-2 text-sm text-muted-foreground bg-sidebar-accent/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border border-sidebar-border transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="shrink-0"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.3-4.3"></path>
+              </svg>
+              <span class="flex-1 text-left text-xs">Search...</span>
+              <span class="kbd hidden sm:inline-flex">
+                <span>⌘</span><span>K</span>
+              </span>
+            </button>
+          </div>
 
-                    <div role="group">
-                        <ul>
-                            {siteConfig.nav.map((item) => (
+          <div role="group">
+            <ul>
+              {siteConfig.nav.map((item) => (
                                 <li>
                                     <a
                                         href={item.href}
@@ -176,76 +176,73 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
                                     </a>
                                 </li>
                             ))}
-                        </ul>
-                    </div>
-                </section>
+            </ul>
+          </div>
+        </section>
 
-                <footer>
-                    <!-- User profile popover — avatar trigger at bottom of sidebar -->
-                    <div class="popover w-full" data-keep-mobile-sidebar-open>
-                        <button
-                            type="button"
-                            aria-expanded="false"
-                            aria-controls="user-popover"
-                            data-keep-mobile-sidebar-open
-                            class="flex w-full items-center gap-3 rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 transition-colors h-12"
-                        >
-                            <!-- Avatar -->
-                            <img
-                                class="size-8 shrink-0 rounded-lg object-cover ring-1 ring-sidebar-border"
-                                src={siteConfig.avatar}
-                                alt={siteConfig.name}
-                                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-                            />
-                            <div
-                                class="size-8 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground items-center justify-center text-sm font-semibold ring-1 ring-sidebar-border"
-                                style="display:none"
-                            >
-                                {avatarInitial}
-                            </div>
-                            <!-- Identity -->
-                            <div
-                                class="grid flex-1 text-left leading-tight min-w-0"
-                            >
-                                <span
-                                    class="truncate text-sm font-semibold text-sidebar-foreground"
-                                    >{siteConfig.name}</span
-                                >
-                                <span
-                                    class="truncate text-xs text-muted-foreground"
-                                    >{siteConfig.location}</span
-                                >
-                            </div>
-                            <!-- Chevron up indicator -->
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                class="shrink-0 text-muted-foreground"
-                                aria-hidden="true"
-                            >
-                                <path d="m18 15-6-6-6 6"></path>
-                            </svg>
-                        </button>
+        <footer>
+          <!-- User profile popover — avatar trigger at bottom of sidebar -->
+          <div class="popover w-full" data-keep-mobile-sidebar-open>
+            <button
+              type="button"
+              aria-expanded="false"
+              aria-controls="user-popover"
+              data-keep-mobile-sidebar-open
+              class="flex w-full items-center gap-3 rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 transition-colors h-12"
+            >
+              <!-- Avatar -->
+              <img
+                class="size-8 shrink-0 rounded-lg object-cover ring-1 ring-sidebar-border"
+                src={siteConfig.avatar}
+                alt={siteConfig.name}
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+              >
+              <div
+                class="size-8 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground items-center justify-center text-sm font-semibold ring-1 ring-sidebar-border"
+                style="display:none"
+              >
+                {avatarInitial}
+              </div>
+              <!-- Identity -->
+              <div class="grid flex-1 text-left leading-tight min-w-0">
+                <span
+                  class="truncate text-sm font-semibold text-sidebar-foreground"
+                  >{siteConfig.name}</span
+                >
+                <span class="truncate text-xs text-muted-foreground"
+                  >{siteConfig.location}</span
+                >
+              </div>
+              <!-- Chevron up indicator -->
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              >
+                <path d="m18 15-6-6-6 6"></path>
+              </svg>
+            </button>
 
-                        <!-- Popover panel — opens upward -->
-                        <div
-                            id="user-popover"
-                            data-popover
-                            data-side="top"
-                            data-align="start"
-                            aria-hidden="true"
-                            class="w-56"
-                        >
-                            <!-- Social links -->
-                            <div class="py-1">
-                                {siteConfig.social.github && (
+            <!-- Popover panel — opens upward -->
+            <div
+              id="user-popover"
+              data-popover
+              data-side="top"
+              data-align="start"
+              aria-hidden="true"
+              class="w-56"
+            >
+              <!-- Social links -->
+              <div class="py-1">
+                {siteConfig.social.github && (
                                     <a
                                         href={siteConfig.social.github}
                                         target="_blank"
@@ -271,7 +268,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
                                         GitHub
                                     </a>
                                 )}
-                                {siteConfig.social.twitter && (
+                {siteConfig.social.twitter && (
                                     <a
                                         href={siteConfig.social.twitter}
                                         target="_blank"
@@ -297,7 +294,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
                                         X
                                     </a>
                                 )}
-                                {siteConfig.social.linkedin && (
+                {siteConfig.social.linkedin && (
                                     <a
                                         href={siteConfig.social.linkedin}
                                         target="_blank"
@@ -324,7 +321,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
                                         LinkedIn
                                     </a>
                                 )}
-                                {siteConfig.social.email && (
+                {siteConfig.social.email && (
                                     <a
                                         href={`mailto:${siteConfig.social.email}`}
                                         class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -348,201 +345,193 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
                                         Email
                                     </a>
                                 )}
-                            </div>
+              </div>
 
-                            <!-- Divider + theme toggle -->
-                            <div class="border-t border-border py-1">
-                                <button
-                                    id="theme-toggle"
-                                    type="button"
-                                    aria-label="Toggle theme"
-                                    class="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        width="14"
-                                        height="14"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        class="text-muted-foreground shrink-0 hidden dark:block"
-                                        aria-hidden="true"
-                                    >
-                                        <circle cx="12" cy="12" r="4"></circle>
-                                        <path
-                                            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
-                                        ></path>
-                                    </svg>
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        width="14"
-                                        height="14"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        class="text-muted-foreground shrink-0 block dark:hidden"
-                                        aria-hidden="true"
-                                    >
-                                        <path
-                                            d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"
-                                        ></path>
-                                    </svg>
-                                    <span class="dark:hidden">Dark mode</span>
-                                    <span class="hidden dark:inline"
-                                        >Light mode</span
-                                    >
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </footer>
-            </nav>
-        </aside>
-
-        <!-- Sibling of .sidebar — gets auto margin from basecoat sidebar CSS -->
-        <div class="flex flex-col min-h-svh">
-            <!-- Mobile top bar -->
-            <header
-                class="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 md:hidden"
-                data-pagefind-ignore
-            >
+              <!-- Divider + theme toggle -->
+              <div class="border-t border-border py-1">
                 <button
-                    type="button"
-                    onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))"
-                    aria-label="Open menu"
-                    class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                  id="theme-toggle"
+                  type="button"
+                  aria-label="Toggle theme"
+                  class="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                 >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                    >
-                        <line x1="4" x2="20" y1="6" y2="6"></line>
-                        <line x1="4" x2="20" y1="12" y2="12"></line>
-                        <line x1="4" x2="20" y1="18" y2="18"></line>
-                    </svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-muted-foreground shrink-0 hidden dark:block"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path
+                      d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+                    ></path>
+                  </svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-muted-foreground shrink-0 block dark:hidden"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+                  </svg>
+                  <span class="dark:hidden">Dark mode</span>
+                  <span class="hidden dark:inline">Light mode</span>
                 </button>
-            </header>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </nav>
+    </aside>
 
-            <main class="flex-1 pb-16">
-                <slot />
-            </main>
-        </div>
+    <!-- Sibling of .sidebar — gets auto margin from basecoat sidebar CSS -->
+    <div class="flex flex-col min-h-svh">
+      <!-- Mobile top bar -->
+      <header
+        class="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 md:hidden"
+        data-pagefind-ignore
+      >
+        <button
+          type="button"
+          onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))"
+          aria-label="Open menu"
+          class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="4" x2="20" y1="6" y2="6"></line>
+            <line x1="4" x2="20" y1="12" y2="12"></line>
+            <line x1="4" x2="20" y1="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
 
-        <script>
-            import "basecoat-css/all";
-            import type { TransitionBeforeSwapEvent } from "astro:transitions/client";
+      <main class="flex-1 pb-16"><slot /></main>
+    </div>
 
-            // Transfer the dark class to the incoming document before the swap so the
-            // theme never flashes. The new page's <html> is server-rendered without the
-            // class; astro:before-swap lets us patch it before it hits the DOM.
-            document.addEventListener("astro:before-swap", (e) => {
-                const isDark =
-                    document.documentElement.classList.contains("dark");
-                (
-                    e as TransitionBeforeSwapEvent
-                ).newDocument.documentElement.classList.toggle("dark", isDark);
-                // Release scroll lock before the page swaps out.
-                unlockScroll();
-            });
+    <script>
+      import "basecoat-css/all";
+      import type { TransitionBeforeSwapEvent } from "astro:transitions/client";
 
-            // iOS-compatible scroll lock: freeze the body at the current scroll position
-            // using position:fixed so the page can't scroll behind the sidebar overlay.
-            // This avoids overflow:hidden (breaks touch events on fixed elements in Safari)
-            // and touchmove interception (suppresses taps with any finger movement).
-            let savedScrollY = 0;
+      // Transfer the dark class to the incoming document before the swap so the
+      // theme never flashes. The new page's <html> is server-rendered without the
+      // class; astro:before-swap lets us patch it before it hits the DOM.
+      document.addEventListener("astro:before-swap", (e) => {
+        const isDark = document.documentElement.classList.contains("dark");
+        (
+          e as TransitionBeforeSwapEvent
+        ).newDocument.documentElement.classList.toggle("dark", isDark);
+        // Release scroll lock before the page swaps out.
+        unlockScroll();
+      });
 
-            const lockScroll = () => {
-                savedScrollY = window.scrollY;
-                document.body.style.position = "fixed";
-                document.body.style.top = `-${savedScrollY}px`;
-                document.body.style.width = "100%";
-            };
+      // iOS-compatible scroll lock: freeze the body at the current scroll position
+      // using position:fixed so the page can't scroll behind the sidebar overlay.
+      // This avoids overflow:hidden (breaks touch events on fixed elements in Safari)
+      // and touchmove interception (suppresses taps with any finger movement).
+      let savedScrollY = 0;
 
-            const unlockScroll = () => {
-                document.body.style.removeProperty("position");
-                document.body.style.removeProperty("top");
-                document.body.style.removeProperty("width");
-                window.scrollTo({ top: savedScrollY, behavior: "instant" });
-            };
+      const lockScroll = () => {
+        savedScrollY = window.scrollY;
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${savedScrollY}px`;
+        document.body.style.width = "100%";
+      };
 
-            // Re-initialize basecoat after each View Transition page swap.
-            // basecoat's own DOMContentLoaded handler handles the initial page load.
-            // We only need to call stop/initAll/start after a body swap (navigation),
-            // because the swap removes the body element and disconnects basecoat's
-            // MutationObserver. Calling initAll on the first astro:page-load would
-            // add a second set of event listeners on top of the ones basecoat already
-            // attached, breaking components that toggle state on click (e.g. popovers).
-            let sidebarObserver: MutationObserver | null = null;
-            let firstLoad = true;
+      const unlockScroll = () => {
+        document.body.style.removeProperty("position");
+        document.body.style.removeProperty("top");
+        document.body.style.removeProperty("width");
+        window.scrollTo({ top: savedScrollY, behavior: "instant" });
+      };
 
-            const initPage = () => {
-                if (!firstLoad) {
-                    window.basecoat?.stop();
-                    window.basecoat?.initAll();
-                    window.basecoat?.start();
-                }
-                firstLoad = false;
+      // Re-initialize basecoat after each View Transition page swap.
+      // basecoat's own DOMContentLoaded handler handles the initial page load.
+      // We only need to call stop/initAll/start after a body swap (navigation),
+      // because the swap removes the body element and disconnects basecoat's
+      // MutationObserver. Calling initAll on the first astro:page-load would
+      // add a second set of event listeners on top of the ones basecoat already
+      // attached, breaking components that toggle state on click (e.g. popovers).
+      let sidebarObserver: MutationObserver | null = null;
+      let firstLoad = true;
 
-                // Set up the mobile sidebar scroll-lock observer.
-                // astro:before-swap always calls unlockScroll() before a navigation,
-                // so we only need to observe future inert changes — no initial sync needed.
-                // The lock only applies on mobile where the sidebar is a full-screen overlay;
-                // on desktop the sidebar is always visible and inert is never toggled.
-                sidebarObserver?.disconnect();
-                const sidebar = document.querySelector(".sidebar");
-                if (sidebar) {
-                    const isMobile = () =>
-                        !window.matchMedia("(min-width: 768px)").matches;
-                    sidebarObserver = new MutationObserver(() => {
-                        if (!isMobile()) return;
-                        sidebar.hasAttribute("inert")
-                            ? unlockScroll()
-                            : lockScroll();
-                    });
-                    sidebarObserver.observe(sidebar, {
-                        attributes: true,
-                        attributeFilter: ["inert"],
-                    });
-                }
-            };
+      const initPage = () => {
+        if (!firstLoad) {
+          window.basecoat?.stop();
+          window.basecoat?.initAll();
+          window.basecoat?.start();
+        }
+        firstLoad = false;
 
-            document.addEventListener("astro:page-load", initPage);
+        // Set up the mobile sidebar scroll-lock observer.
+        // astro:before-swap always calls unlockScroll() before a navigation,
+        // so we only need to observe future inert changes — no initial sync needed.
+        // The lock only applies on mobile where the sidebar is a full-screen overlay;
+        // on desktop the sidebar is always visible and inert is never toggled.
+        sidebarObserver?.disconnect();
+        const sidebar = document.querySelector(".sidebar");
+        if (sidebar) {
+          const isMobile = () =>
+            !window.matchMedia("(min-width: 768px)").matches;
+          sidebarObserver = new MutationObserver(() => {
+            if (!isMobile()) {
+              return;
+            }
+            sidebar.hasAttribute("inert") ? unlockScroll() : lockScroll();
+          });
+          sidebarObserver.observe(sidebar, {
+            attributes: true,
+            attributeFilter: ["inert"],
+          });
+        }
+      };
 
-            // Use event delegation on document so listeners survive body swaps.
-            document.addEventListener("click", (e) => {
-                const target = e.target as Element;
+      document.addEventListener("astro:page-load", initPage);
 
-                if (target.closest("#theme-toggle")) {
-                    document.documentElement.classList.toggle("dark");
-                    localStorage.theme =
-                        document.documentElement.classList.contains("dark")
-                            ? "dark"
-                            : "light";
-                }
+      // Use event delegation on document so listeners survive body swaps.
+      document.addEventListener("click", (e) => {
+        const target = e.target as Element;
 
-                if (target.closest("#search-trigger")) {
-                    (
-                        document.getElementById(
-                            "search-dialog",
-                        ) as HTMLDialogElement
-                    )?.showModal();
-                    document.getElementById("search-input")?.focus();
-                }
-            });
-        </script>
-    </body>
+        if (target.closest("#theme-toggle")) {
+          document.documentElement.classList.toggle("dark");
+          localStorage.theme = document.documentElement.classList.contains(
+            "dark"
+          )
+            ? "dark"
+            : "light";
+        }
+
+        if (target.closest("#search-trigger")) {
+          (
+            document.getElementById("search-dialog") as HTMLDialogElement
+          )?.showModal();
+          document.getElementById("search-input")?.focus();
+        }
+      });
+    </script>
+  </body>
 </html>
