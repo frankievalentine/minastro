@@ -1,14 +1,13 @@
-# Ultracite Code Standards
+# ESLint Code Standards
 
-This project uses **Ultracite**, a zero-config preset that enforces strict code quality standards through automated formatting and linting.
+This project uses **ESLint** with TypeScript, Astro, and jsx-a11y plugins for code quality and accessibility checking.
 
 ## Quick Reference
 
-- **Format code**: `bun x ultracite fix`
-- **Check for issues**: `bun x ultracite check`
-- **Diagnose setup**: `bun x ultracite doctor`
+- **Check types + lint**: `bun run check`
+- **Auto-fix lint issues**: `bun run fix`
 
-Biome (the underlying engine) provides robust linting and formatting. Most issues are automatically fixable.
+ESLint provides linting; `astro check` handles TypeScript type checking for `.astro` files. Most common issues are automatically fixable with `bun run fix`.
 
 ---
 
@@ -40,20 +39,15 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 - Handle errors appropriately in async code with try-catch blocks
 - Don't use async functions as Promise executors
 
-### React & JSX
+### Accessibility (jsx-a11y)
 
-- Use function components over class components
-- Call hooks at the top level only, never conditionally
-- Specify all dependencies in hook dependency arrays correctly
-- Use the `key` prop for elements in iterables (prefer unique IDs over array indices)
-- Nest children between opening and closing tags instead of passing as props
-- Don't define components inside other components
-- Use semantic HTML and ARIA attributes for accessibility:
-  - Provide meaningful alt text for images
-  - Use proper heading hierarchy
-  - Add labels for form inputs
-  - Include keyboard event handlers alongside mouse events
-  - Use semantic elements (`<button>`, `<nav>`, etc.) instead of divs with roles
+- Use semantic HTML elements (`<button>`, `<nav>`, `<dialog>`, etc.) instead of divs with roles
+- Provide meaningful alt text for images
+- Use proper heading hierarchy
+- Add labels for form inputs
+- Include keyboard event handlers alongside mouse events
+- Add `rel="noopener noreferrer"` when using `target="_blank"` on links
+- Avoid attaching event handlers to non-interactive elements; use document-level delegation instead
 
 ### Error Handling & Debugging
 
@@ -67,36 +61,20 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 - Keep functions focused and under reasonable cognitive complexity limits
 - Extract complex conditions into well-named boolean variables
 - Use early returns to reduce nesting
-- Prefer simple conditionals over nested ternary operators
+- Prefer simple conditionals over nested ternary operators — avoid ternaries as statements
 - Group related code together and separate concerns
 
 ### Security
 
-- Add `rel="noopener"` when using `target="_blank"` on links
 - Avoid `dangerouslySetInnerHTML` unless absolutely necessary
 - Don't use `eval()` or assign directly to `document.cookie`
 - Validate and sanitize user input
 
 ### Performance
 
-- Avoid spread syntax in accumulators within loops
 - Use top-level regex literals instead of creating them in loops
 - Prefer specific imports over namespace imports
 - Avoid barrel files (index files that re-export everything)
-- Use proper image components (e.g., Next.js `<Image>`) over `<img>` tags
-
-### Framework-Specific Guidance
-
-**Next.js:**
-- Use Next.js `<Image>` component for images
-- Use `next/head` or App Router metadata API for head elements
-- Use Server Components for async data fetching instead of async Client Components
-
-**React 19+:**
-- Use ref as a prop instead of `React.forwardRef`
-
-**Solid/Svelte/Vue/Qwik:**
-- Use `class` and `for` attributes (not `className` or `htmlFor`)
 
 ---
 
@@ -107,17 +85,16 @@ Write code that is **accessible, performant, type-safe, and maintainable**. Focu
 - Don't use `.only` or `.skip` in committed code
 - Keep test suites reasonably flat - avoid excessive `describe` nesting
 
-## When Biome Can't Help
+## When ESLint Can't Help
 
-Biome's linter will catch most issues automatically. Focus your attention on:
+ESLint catches common issues automatically. Focus your attention on:
 
-1. **Business logic correctness** - Biome can't validate your algorithms
+1. **Business logic correctness** - ESLint can't validate your algorithms
 2. **Meaningful naming** - Use descriptive names for functions, variables, and types
 3. **Architecture decisions** - Component structure, data flow, and API design
 4. **Edge cases** - Handle boundary conditions and error states
 5. **User experience** - Accessibility, performance, and usability considerations
-6. **Documentation** - Add comments for complex logic, but prefer self-documenting code
 
 ---
 
-Most formatting and common issues are automatically fixed by Biome. Run `bun x ultracite fix` before committing to ensure compliance.
+Run `bun run fix` before committing to auto-fix common issues, then `bun run check` to catch any remaining type errors or lint violations.

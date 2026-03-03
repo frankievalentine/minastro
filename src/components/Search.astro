@@ -3,7 +3,6 @@
   id="search-dialog"
   class="command-dialog"
   aria-label="Search pages and posts"
-  onclick="if(event.target===this)this.close()"
 >
   <div class="command">
     <header>
@@ -52,7 +51,7 @@
 </style>
 
 <script>
-  let pagefind: any = null;
+  let pagefind: PagefindModule | null = null;
 
   const getDialog = () =>
     document.getElementById("search-dialog") as HTMLDialogElement | null;
@@ -67,8 +66,10 @@
       return;
     }
     try {
-      pagefind = await import("/pagefind/pagefind.js");
-      await pagefind.init();
+      // @ts-expect-error — /pagefind/pagefind.js is generated at build time and absent during type checking
+      const pf: PagefindModule = await import("/pagefind/pagefind.js");
+      pagefind = pf;
+      await pf.init();
     } catch {
       console.warn("Pagefind index not found. Run `bun run build` first.");
     }
@@ -84,7 +85,7 @@
     await ensurePagefind();
   };
 
-  const renderResults = (items: any[]) => {
+  const renderResults = (items: PagefindResult[]) => {
     const menu = getMenu();
     if (!menu) {
       return;
@@ -134,17 +135,18 @@
       }
 
       await ensurePagefind();
-      if (!pagefind) {
+      const pf = pagefind;
+      if (!pf) {
         return;
       }
 
-      const result = await pagefind.debouncedSearch(query, {}, 200);
+      const result = await pf.debouncedSearch(query, {}, 200);
       if (!result) {
         return; // superseded by a newer debounced call
       }
 
       const data = await Promise.all(
-        result.results.slice(0, 8).map((r: any) => r.data())
+        result.results.slice(0, 8).map((r: PagefindSearchResult) => r.data())
       );
       renderResults(data);
     });
@@ -160,6 +162,14 @@
       } else {
         openSearch();
       }
+    }
+  });
+
+  // Close on backdrop click (click target is the dialog element itself when clicking outside content)
+  document.addEventListener("click", (e) => {
+    const dialog = getDialog();
+    if (dialog && e.target === dialog) {
+      dialog.close();
     }
   });
 

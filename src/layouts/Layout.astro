@@ -192,10 +192,10 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
             >
               <!-- Avatar -->
               <img
+                id="sidebar-avatar"
                 class="size-8 shrink-0 rounded-lg object-cover ring-1 ring-sidebar-border"
                 src={siteConfig.avatar}
                 alt={siteConfig.name}
-                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
               >
               <div
                 class="size-8 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground items-center justify-center text-sm font-semibold ring-1 ring-sidebar-border"
@@ -487,6 +487,18 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
         }
         firstLoad = false;
 
+        // Avatar image fallback: hide img and reveal the initial-letter div on load error
+        const avatar = document.getElementById("sidebar-avatar") as HTMLImageElement | null;
+        if (avatar) {
+          avatar.onerror = () => {
+            avatar.style.display = "none";
+            const fallback = avatar.nextElementSibling as HTMLElement | null;
+            if (fallback) {
+              fallback.style.display = "flex";
+            }
+          };
+        }
+
         // Set up the mobile sidebar scroll-lock observer.
         // astro:before-swap always calls unlockScroll() before a navigation,
         // so we only need to observe future inert changes — no initial sync needed.
@@ -501,7 +513,11 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
             if (!isMobile()) {
               return;
             }
-            sidebar.hasAttribute("inert") ? unlockScroll() : lockScroll();
+            if (sidebar.hasAttribute("inert")) {
+              unlockScroll();
+            } else {
+              lockScroll();
+            }
           });
           sidebarObserver.observe(sidebar, {
             attributes: true,

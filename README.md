@@ -55,7 +55,7 @@ export const siteConfig: SiteConfig = {
     description: "Occasional notes on engineering and ideas.",
   },
   analytics: {
-    enabled: false,                              // set to true to activate
+    enabled: false, // set to true to activate
     url: "https://your-analytics.com/api/script.js",
     domain: "your-domain.com",
   },
@@ -100,10 +100,10 @@ Create `.md` files in `src/content/projects/`:
 title: my-project
 description: What this project does in a sentence or two.
 github: https://github.com/you/my-project
-url: https://my-project.com        # optional
+url: https://my-project.com # optional
 tags: [typescript, cli]
-featured: true                     # show on home page
-status: active                     # active | wip | archived
+featured: true # show on home page
+status: active # active | wip | archived
 date: 2025-01-01
 ---
 ```
@@ -112,29 +112,29 @@ Projects marked `featured: true` appear in the Projects card on the home page. A
 
 ## Project structure
 
-| Path | Description |
-| :--- | :--- |
-| `src/site.config.ts` | All site identity and feature configuration |
-| `src/content/posts/` | Blog posts (`.md` and `.mdx`) |
-| `src/content/projects/` | Project entries (`.md`) |
-| `src/layouts/Layout.astro` | Sidebar shell used by all pages |
-| `src/pages/` | Routes: index, posts, projects, newsletter, rss, 404 |
-| `src/components/` | Search dialog, BackToTop button |
-| `src/styles/global.css` | Tailwind + basecoat imports |
-| `src/utils.ts` | `formatDate`, `readingTime` utilities |
-| `public/` | Static assets: favicon, avatar, manifest, robots.txt |
+| Path                       | Description                                          |
+| :------------------------- | :--------------------------------------------------- |
+| `src/site.config.ts`       | All site identity and feature configuration          |
+| `src/content/posts/`       | Blog posts (`.md` and `.mdx`)                        |
+| `src/content/projects/`    | Project entries (`.md`)                              |
+| `src/layouts/Layout.astro` | Sidebar shell used by all pages                      |
+| `src/pages/`               | Routes: index, posts, projects, newsletter, rss, 404 |
+| `src/components/`          | Search dialog, BackToTop button                      |
+| `src/styles/global.css`    | Tailwind + basecoat imports                          |
+| `src/utils.ts`             | `formatDate`, `readingTime` utilities                |
+| `public/`                  | Static assets: favicon, avatar, manifest, robots.txt |
 
 ## Commands
 
-| Command | Action |
-| :--- | :--- |
-| `bun run dev` | Start local dev server at `localhost:4321` |
-| `bun run build` | Build to `./dist/` and generate Pagefind index |
-| `bun run preview` | Preview the production build locally |
-| `bun run cfpreview` | Preview against Cloudflare Pages via Wrangler |
-| `bun run cfdeploy` | Deploy to Cloudflare Pages |
-| `bun run check` | Lint with Biome via ultracite |
-| `bun run fix` | Auto-fix lint issues |
+| Command             | Action                                         |
+| :------------------ | :--------------------------------------------- |
+| `bun run dev`       | Start local dev server at `localhost:4321`     |
+| `bun run build`     | Build to `./dist/` and generate Pagefind index |
+| `bun run preview`   | Preview the production build locally           |
+| `bun run cfpreview` | Preview against Cloudflare Pages via Wrangler  |
+| `bun run cfdeploy`  | Deploy to Cloudflare Pages                     |
+| `bun run check`     | Type-check and lint (`astro check` + ESLint)   |
+| `bun run fix`       | Auto-fix ESLint issues                         |
 
 > Search only works after `bun run build` — Pagefind generates its index at build time. In dev, the search dialog will open but return no results.
 
@@ -150,7 +150,7 @@ bun run build
 bun run cfdeploy
 ```
 
-Or connect your GitHub repo in the Cloudflare Pages dashboard and set the build command to `bun run build` and the output directory to `dist`.
+Or connect your GitHub repo in the Cloudflare Pages dashboard and set the build command to `bun install && bun run build` and the output directory to `dist`.
 
 ### Docker
 
