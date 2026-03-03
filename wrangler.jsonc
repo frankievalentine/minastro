@@ -4,7 +4,4 @@
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "./dist",
   "send_metrics": false,
-  "build": {
-    "command": "bun install && bun run build",
-  },
 }
