@@ -1,7 +1,31 @@
 {
   "name": "minastro",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-03-02",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "./dist",
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
   "send_metrics": false,
+  "build": {
+    "command": "bun run build"
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "minastro",
+      "database_id": "your-d1-database-id"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "minastro-media"
+    }
+  ]
 }

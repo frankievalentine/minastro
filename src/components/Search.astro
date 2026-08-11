@@ -1,11 +1,12 @@
-<!-- Search dialog using basecoat command-dialog pattern + Pagefind headless API -->
+<!-- Search dialog using the basecoat command-dialog pattern and EmDash runtime search. -->
 <dialog
   id="search-dialog"
   class="command-dialog"
-  aria-label="Search pages and posts"
+  aria-labelledby="search-dialog-title"
 >
   <div class="command">
     <header>
+      <h2 id="search-dialog-title" class="sr-only">Search pages and posts</h2>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
@@ -22,7 +23,8 @@
       <input
         id="search-input"
         type="text"
-        placeholder="Search pages and posts..."
+        placeholder="Search pages and posts"
+        aria-label="Search pages and posts"
         autocomplete="off"
         autocorrect="off"
         spellcheck="false"
@@ -35,122 +37,164 @@
     <div
       role="menu"
       id="search-menu"
-      data-empty="No results found."
       class="scrollbar"
-    ><!-- Pagefind results injected here --></div>
+      aria-label="Search results"
+      aria-busy="false"
+    >
+      <p id="search-message" class="px-3 py-8 text-center text-sm text-muted-foreground">
+        Start typing to search.
+      </p>
+    </div>
+    <p id="search-status" class="sr-only" role="status" aria-live="polite"></p>
   </div>
 </dialog>
 
 <style is:global>
   @reference "../styles/global.css";
 
-  /* Allow multi-line result items — override the command component's truncate default */
-  #search-dialog [role="menu"] [role="menuitem"] {
-    @apply whitespace-normal overflow-visible items-start h-auto;
+  #search-dialog [role="menu"] {
+    min-height: 4.5rem;
+  }
+
+  #search-dialog [role="menuitem"] {
+    @apply h-auto items-start whitespace-normal overflow-visible;
+  }
+
+  #search-dialog mark {
+    @apply rounded-sm bg-primary/15 px-0.5 text-foreground;
   }
 </style>
 
 <script>
-  let pagefind: PagefindModule | null = null;
+  interface SearchResult {
+    collection: string;
+    id: string;
+    slug: string | null;
+    locale: string;
+    title?: string;
+    snippet?: string;
+    score: number;
+  }
+
+  interface SearchResponse {
+    success: boolean;
+    data?: { items: SearchResult[]; nextCursor?: string };
+    error?: { code: string; message: string };
+  }
 
   const getDialog = () =>
     document.getElementById("search-dialog") as HTMLDialogElement | null;
   const getInput = () =>
     document.getElementById("search-input") as HTMLInputElement | null;
-  const getMenu = () =>
-    document.getElementById("search-menu") as HTMLElement | null;
+  const getMenu = () => document.getElementById("search-menu");
+  const getStatus = () => document.getElementById("search-status");
 
-  // Lazy-load Pagefind on first open
-  const ensurePagefind = async () => {
-    if (pagefind) {
-      return;
-    }
-    try {
-      // @ts-expect-error — /pagefind/pagefind.js is generated at build time and absent during type checking
-      const pf: PagefindModule = await import("/pagefind/pagefind.js");
-      pagefind = pf;
-      await pf.init();
-    } catch {
-      console.warn("Pagefind index not found. Run `bun run build` first.");
-    }
-  };
+  let debounceTimer: number | undefined;
+  let abortController: AbortController | undefined;
+  let lastTrigger: HTMLElement | null = null;
 
-  const openSearch = async () => {
-    const dialog = getDialog();
-    if (!dialog) {
-      return;
-    }
-    dialog.showModal();
-    getInput()?.focus();
-    await ensurePagefind();
-  };
-
-  const renderResults = (items: PagefindResult[]) => {
+  const setMessage = (message: string) => {
     const menu = getMenu();
-    if (!menu) {
-      return;
-    }
+    if (!menu) return;
+    menu.innerHTML = `<p id="search-message" class="px-3 py-8 text-center text-sm text-muted-foreground">${message}</p>`;
+  };
 
+  const resultUrl = (result: SearchResult) => {
+    if (!result.slug || !["posts", "projects"].includes(result.collection)) return null;
+    return `/${result.collection}/${encodeURIComponent(result.slug)}`;
+  };
+
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[character] || character);
+
+  const renderResults = (items: SearchResult[]) => {
+    const menu = getMenu();
+    const status = getStatus();
+    if (!menu) return;
     if (items.length === 0) {
-      menu.innerHTML = "";
-      window.basecoat?.init("command");
+      setMessage("No results found.");
+      if (status) status.textContent = "No results found.";
       return;
     }
 
     menu.innerHTML = items
-      .map((item) => {
-        const title = item.meta?.title ?? "Untitled";
-        // Strip <mark> tags from excerpt for the sub-text (keep plain text)
-        const excerpt = item.excerpt.replace(/<\/?mark>/g, "");
-        return `
-          <a role="menuitem" href="${item.url}" data-force class="flex-col gap-0.5 !items-start !h-auto !whitespace-normal">
-            <span class="font-medium leading-snug">${title}</span>
-            <span class="text-xs text-muted-foreground leading-snug line-clamp-2">${excerpt}</span>
-          </a>
-        `;
+      .map((result) => {
+        const href = resultUrl(result);
+        if (!href) return "";
+        const title = escapeHtml(result.title || "Untitled result");
+        const collection = escapeHtml(result.collection);
+        const snippet = result.snippet
+          ? `<span class="mt-1 line-clamp-2 text-xs text-muted-foreground">${result.snippet}</span>`
+          : "";
+        return `<a role="menuitem" href="${href}" class="block px-3 py-2.5 outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground">
+          <span class="block truncate text-sm font-medium">${title}</span>
+          <span class="mt-0.5 block text-[0.6875rem] uppercase tracking-wide text-muted-foreground">${collection}</span>
+          ${snippet}
+        </a>`;
       })
       .join("");
-
-    // Re-init command component so keyboard navigation works on fresh items
-    window.basecoat?.init("command");
+    if (status) status.textContent = `${items.length} result${items.length === 1 ? "" : "s"} found.`;
   };
 
-  // Re-attach element listeners on each page load (elements are replaced by View Transitions)
-  document.addEventListener("astro:page-load", () => {
-    const input = getInput();
+  const search = async (rawQuery: string) => {
+    const query = rawQuery.trim();
     const menu = getMenu();
-    if (!(input && menu)) {
+    const status = getStatus();
+    if (!menu) return;
+    abortController?.abort();
+    if (query.length < 2) {
+      menu.setAttribute("aria-busy", "false");
+      setMessage(query ? "Keep typing to search." : "Start typing to search.");
+      if (status) status.textContent = "";
       return;
     }
 
-    // Reset state for the new page
-    input.value = "";
-    menu.innerHTML = "";
-
-    input.addEventListener("input", async () => {
-      const query = input.value.trim();
-      if (!query) {
-        menu.innerHTML = "";
-        return;
+    abortController = new AbortController();
+    menu.setAttribute("aria-busy", "true");
+    setMessage("Searching…");
+    if (status) status.textContent = "Searching…";
+    try {
+      const params = new URLSearchParams({ q: query, collections: "posts,projects", limit: "8" });
+      const response = await fetch(`/_emdash/api/search?${params}`, {
+        signal: abortController.signal,
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as SearchResponse;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error?.message || "Search is temporarily unavailable.");
       }
+      renderResults(payload.data.items);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setMessage("Search is temporarily unavailable. Please try again.");
+      if (status) status.textContent = "Search is temporarily unavailable.";
+    } finally {
+      menu.setAttribute("aria-busy", "false");
+    }
+  };
 
-      await ensurePagefind();
-      const pf = pagefind;
-      if (!pf) {
-        return;
-      }
+  const handleInput = (event: Event) => {
+    window.clearTimeout(debounceTimer);
+    const input = event.currentTarget as HTMLInputElement;
+    debounceTimer = window.setTimeout(() => search(input.value), 250);
+  };
 
-      const result = await pf.debouncedSearch(query, {}, 200);
-      if (!result) {
-        return; // superseded by a newer debounced call
-      }
+  const openDialog = (trigger?: HTMLElement | null) => {
+    const dialog = getDialog();
+    const input = getInput();
+    if (!dialog) return;
+    lastTrigger = trigger || lastTrigger;
+    if (!dialog.open) dialog.showModal();
+    input?.focus();
+  };
 
-      const data = await Promise.all(
-        result.results.slice(0, 8).map((r: PagefindSearchResult) => r.data())
-      );
-      renderResults(data);
-    });
-  });
+  const closeDialog = () => getDialog()?.close();
 
   // CMD+K / CTRL+K — on document so it survives body swaps
   document.addEventListener("keydown", (e) => {
@@ -158,18 +202,44 @@
       e.preventDefault();
       const dialog = getDialog();
       if (dialog?.open) {
-        dialog.close();
+        closeDialog();
       } else {
-        openSearch();
+        openDialog();
       }
     }
   });
+
+  document.addEventListener("input", (e) => {
+    if ((e.target as Element | null)?.id === "search-input") handleInput(e);
+  });
+
+  document.addEventListener("click", (e) => {
+    const target = e.target as Element | null;
+    if (target?.closest("#search-trigger")) {
+      lastTrigger = target.closest("#search-trigger") as HTMLElement;
+      openDialog(lastTrigger);
+    }
+  });
+
+  const attachDialogEvents = () => {
+    const dialog = getDialog();
+    if (!dialog || dialog.dataset.searchEventsAttached) return;
+    dialog.dataset.searchEventsAttached = "true";
+    dialog.addEventListener("close", () => {
+      abortController?.abort();
+      window.clearTimeout(debounceTimer);
+      if (lastTrigger?.isConnected) lastTrigger.focus();
+    });
+  };
+
+  attachDialogEvents();
+  document.addEventListener("astro:page-load", attachDialogEvents);
 
   // Close on backdrop click (click target is the dialog element itself when clicking outside content)
   document.addEventListener("click", (e) => {
     const dialog = getDialog();
     if (dialog && e.target === dialog) {
-      dialog.close();
+      closeDialog();
     }
   });
 

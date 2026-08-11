@@ -86,7 +86,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
     >
 
     <!-- Sitemap + RSS -->
-    <link rel="sitemap" href="/sitemap-index.xml">
+    <link rel="sitemap" href="/sitemap.xml">
     <link
       rel="alternate"
       type="application/rss+xml"
@@ -119,7 +119,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
   <body class="min-h-svh bg-background text-foreground antialiased">
     <Search />
 
-    <aside class="sidebar" data-side="left" data-pagefind-ignore>
+    <aside class="sidebar" data-side="left">
       <nav>
         <section class="scrollbar">
           <!-- Search trigger -->
@@ -403,7 +403,6 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
       <!-- Mobile top bar -->
       <header
         class="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 md:hidden"
-        data-pagefind-ignore
       >
         <button
           type="button"

@@ -1,0 +1,188 @@
+[
+  {
+    "_type": "block",
+    "_key": "k0002",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k0001",
+        "text": "MDX is a superset of Markdown that lets you embed JSX components inline. This is useful for interactive demos, custom callouts, or anything that needs more structure than plain prose."
+      }
+    ]
+  },
+  {
+    "_type": "block",
+    "_key": "k0004",
+    "style": "h2",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k0003",
+        "text": "A simple inline component"
+      }
+    ]
+  },
+  {
+    "_type": "block",
+    "_key": "k0008",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k0005",
+        "text": "You can import and use Astro components directly in "
+      },
+      {
+        "_type": "span",
+        "_key": "k0006",
+        "text": ".mdx",
+        "marks": [
+          "code"
+        ]
+      },
+      {
+        "_type": "span",
+        "_key": "k0007",
+        "text": " files:"
+      }
+    ]
+  },
+  {
+    "_type": "code",
+    "_key": "k0009",
+    "language": "mdx",
+    "code": "import MyComponent from \"../../components/MyComponent.astro\";\n\n<MyComponent message=\"Hello from MDX\" />"
+  },
+  {
+    "_type": "block",
+    "_key": "k000b",
+    "style": "h2",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k000a",
+        "text": "Expressive Code"
+      }
+    ]
+  },
+  {
+    "_type": "block",
+    "_key": "k000g",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k000c",
+        "text": "This template ships with "
+      },
+      {
+        "_type": "span",
+        "_key": "k000e",
+        "text": "Expressive Code",
+        "marks": [
+          "k000d"
+        ]
+      },
+      {
+        "_type": "span",
+        "_key": "k000f",
+        "text": " for syntax-highlighted code blocks with copy buttons, line numbers, and diff highlighting."
+      }
+    ],
+    "markDefs": [
+      {
+        "_key": "k000d",
+        "_type": "link",
+        "href": "https://expressive-code.com/"
+      }
+    ]
+  },
+  {
+    "_type": "code",
+    "_key": "k000h",
+    "language": "typescript",
+    "code": "export function formatDate(date: Date): string {\n  return date.toLocaleDateString(\"en-US\", {\n    year: \"numeric\",\n    month: \"long\",\n    day: \"numeric\",\n  });\n}"
+  },
+  {
+    "_type": "code",
+    "_key": "k000i",
+    "language": "diff",
+    "code": "- const old = \"value\";\n+ const updated = \"new value\";"
+  },
+  {
+    "_type": "block",
+    "_key": "k000k",
+    "style": "h2",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k000j",
+        "text": "When to use MDX vs Markdown"
+      }
+    ]
+  },
+  {
+    "_type": "block",
+    "_key": "k000q",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k000l",
+        "text": "Use plain "
+      },
+      {
+        "_type": "span",
+        "_key": "k000m",
+        "text": ".md",
+        "marks": [
+          "code"
+        ]
+      },
+      {
+        "_type": "span",
+        "_key": "k000n",
+        "text": " files for posts that are entirely prose — no components needed. Reach for "
+      },
+      {
+        "_type": "span",
+        "_key": "k000o",
+        "text": ".mdx",
+        "marks": [
+          "code"
+        ]
+      },
+      {
+        "_type": "span",
+        "_key": "k000p",
+        "text": " when you want to drop in an interactive element, a custom callout card, or a structured data visualization."
+      }
+    ]
+  },
+  {
+    "_type": "block",
+    "_key": "k000u",
+    "style": "normal",
+    "children": [
+      {
+        "_type": "span",
+        "_key": "k000r",
+        "text": "Both file types are supported in "
+      },
+      {
+        "_type": "span",
+        "_key": "k000s",
+        "text": "src/content/posts/",
+        "marks": [
+          "code"
+        ]
+      },
+      {
+        "_type": "span",
+        "_key": "k000t",
+        "text": " and are picked up automatically by the content collection."
+      }
+    ]
+  }
+]

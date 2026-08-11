@@ -1,21 +1,31 @@
 ---
-import { getCollection } from "astro:content";
+import { getEmDashCollection } from "emdash";
 import Layout from "../layouts/Layout.astro";
 import { siteConfig } from "../site.config";
 
-const featuredProjects = (await getCollection("projects"))
+const { entries: allProjects, error } = await getEmDashCollection("projects", {
+  status: "published",
+});
+
+if (error) {
+  console.error("Failed to load projects:", error);
+}
+
+const featuredProjects = (allProjects ?? [])
   .filter((p) => p.data.featured)
   .sort((a, b) => {
-    if (!(a.data.date || b.data.date)) {
+    const aDate = a.data.publishedAt;
+    const bDate = b.data.publishedAt;
+    if (!(aDate || bDate)) {
       return 0;
     }
-    if (!a.data.date) {
+    if (!aDate) {
       return 1;
     }
-    if (!b.data.date) {
+    if (!bDate) {
       return -1;
     }
-    return b.data.date.valueOf() - a.data.date.valueOf();
+    return bDate.valueOf() - aDate.valueOf();
   });
 
 const statusLabel: Record<string, string> = {
@@ -74,16 +84,16 @@ const statusLabel: Record<string, string> = {
                         {project.data.title}
                       </span>
                       <span class="badge-secondary text-xs">
-                        {statusLabel[project.data.status] ?? project.data.status}
+                        {statusLabel[project.data.projectStatus] ?? project.data.projectStatus}
                       </span>
                     </div>
                     <p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                       {project.data.description}
                     </p>
-                    {project.data.tags && project.data.tags.length > 0 && (
+                    {project.data.terms?.tag && project.data.terms.tag.length > 0 && (
                       <div class="flex gap-1.5 flex-wrap mt-2">
-                        {project.data.tags.map((tag) => (
-                          <span class="badge-outline text-xs">{tag}</span>
+                        {project.data.terms.tag.map((tag) => (
+                          <span class="badge-outline text-xs">{tag.label ?? tag.name}</span>
                         ))}
                       </div>
                     )}

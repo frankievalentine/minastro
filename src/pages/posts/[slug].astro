@@ -1,34 +1,37 @@
 ---
-import type { CollectionEntry } from "astro:content";
-import { getCollection, render } from "astro:content";
+export const prerender = false;
+
+import { getEmDashEntry, extractPlainText } from "emdash";
+import { PortableText } from "emdash/ui";
 import BackToTop from "../../components/ui/BackToTop.astro";
 import Layout from "../../layouts/Layout.astro";
 import { formatDate, readingTime } from "../../utils";
 
-export async function getStaticPaths() {
-  const posts = await getCollection("posts");
-  return posts.map((post) => ({
-    params: { slug: post.id },
-    props: { post },
-  }));
+const slug = Astro.params.slug;
+if (!slug) {
+  return new Response(null, { status: 404 });
+}
+const { entry: post, error, isPreview } = await getEmDashEntry("posts", slug);
+
+if (error) {
+  return new Response("Server error", { status: 500 });
 }
 
-interface Props {
-  post: CollectionEntry<"posts">;
+if (!post) {
+  return new Response(null, { status: 404 });
 }
 
-const { post } = Astro.props;
-const { Content } = await render(post);
+if (post.data.status !== "published" && !isPreview) {
+  return new Response(null, { status: 404 });
+}
 
-// rawContent() is only available for md/mdx entries via the glob loader
-const bodyText = post.body ?? "";
-const timeToRead = readingTime(bodyText);
+const timeToRead = readingTime(extractPlainText(post.data.content));
 ---
 
 <Layout
   title={post.data.title}
   description={post.data.description}
-  currentPage={`/posts/${post.id}`}
+  currentPage={`/posts/${post.data.slug}`}
 >
   <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
     <!-- Back link -->
@@ -66,19 +69,19 @@ const timeToRead = readingTime(bodyText);
       </p>
       <div class="flex items-center gap-3 flex-wrap">
         <time
-          datetime={post.data.date.toISOString()}
+          datetime={post.data.publishedAt?.toISOString()}
           class="text-sm text-muted-foreground"
         >
-          {formatDate(post.data.date)}
+          {post.data.publishedAt ? formatDate(post.data.publishedAt) : ""}
         </time>
         <span class="text-border" aria-hidden="true">·</span>
         <span class="text-sm text-muted-foreground">{timeToRead}</span>
-        {post.data.tags && post.data.tags.length > 0 && (
+        {post.data.terms?.tag && post.data.terms.tag.length > 0 && (
           <>
             <span class="text-border" aria-hidden="true">·</span>
             <div class="flex gap-1.5 flex-wrap">
-              {post.data.tags.map((tag) => (
-                <span class="badge-outline text-xs">{tag}</span>
+              {post.data.terms.tag.map((tag) => (
+                <span class="badge-outline text-xs">{tag.label ?? tag.name}</span>
               ))}
             </div>
           </>
@@ -90,7 +93,7 @@ const timeToRead = readingTime(bodyText);
 
     <!-- Post body -->
     <div class="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-      <Content />
+      <PortableText value={post.data.content} />
     </div>
 
     <div role="separator" class="border-t border-border mt-12 mb-8"></div>

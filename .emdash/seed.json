@@ -1,0 +1,78 @@
+{
+  "$schema": "https://docs.emdashcms.com/schemas/seed-v1.json",
+  "version": "1",
+  "meta": {
+    "name": "minastro",
+    "description": "Seed configuration for minastro — a minimal Astro personal site template with blog, projects, newsletter, and search."
+  },
+  "settings": {
+    "title": "Your Name",
+    "tagline": "Your Name's personal website — engineer, maker, writer.",
+    "url": "https://your-domain.com",
+    "postsPerPage": 10,
+    "dateFormat": "MMMM d, yyyy",
+    "timezone": "UTC",
+    "social": {
+      "github": "https://github.com/yourusername",
+      "twitter": "https://x.com/yourusername",
+      "linkedin": "https://linkedin.com/in/yourusername"
+    }
+  },
+  "collections": [
+    {
+      "slug": "posts",
+      "label": "Posts",
+      "labelSingular": "Post",
+      "description": "Blog posts and articles",
+      "icon": "file-text",
+      "supports": ["drafts", "revisions", "preview", "scheduling", "search", "seo"],
+      "urlPattern": "/posts/{slug}",
+      "fields": [
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "description", "label": "Description", "type": "text", "required": true },
+        { "slug": "content", "label": "Content", "type": "portableText" },
+        { "slug": "featuredImage", "label": "Featured Image", "type": "image" }
+      ]
+    },
+    {
+      "slug": "projects",
+      "label": "Projects",
+      "labelSingular": "Project",
+      "description": "Portfolio projects and open-source work",
+      "icon": "folder",
+      "supports": ["drafts", "revisions", "preview", "scheduling", "search", "seo"],
+      "urlPattern": "/projects/{slug}",
+      "fields": [
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "description", "label": "Description", "type": "text", "required": true },
+        { "slug": "content", "label": "Content", "type": "portableText" },
+        { "slug": "projectStatus", "label": "Project Status", "type": "string" },
+        { "slug": "url", "label": "URL", "type": "url" },
+        { "slug": "github", "label": "GitHub", "type": "url" },
+        { "slug": "featured", "label": "Featured", "type": "boolean" },
+        { "slug": "featuredImage", "label": "Featured Image", "type": "image" }
+      ]
+    }
+  ],
+  "taxonomies": [
+    {
+      "name": "tag",
+      "label": "Tags",
+      "labelSingular": "Tag",
+      "hierarchical": false,
+      "collections": ["posts", "projects"]
+    }
+  ],
+  "menus": [
+    {
+      "name": "primary",
+      "label": "Primary Navigation",
+      "items": [
+        { "type": "link", "label": "About", "url": "/" },
+        { "type": "link", "label": "Posts", "url": "/posts" },
+        { "type": "link", "label": "Projects", "url": "/projects" },
+        { "type": "link", "label": "Newsletter", "url": "/newsletter" }
+      ]
+    }
+  ]
+}
