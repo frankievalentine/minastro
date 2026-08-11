@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-# Keep pagefind assets out of the index — they're JS/data, not content
-Disallow: /pagefind/
+# Keep the EmDash admin panel out of search indexes
+Disallow: /_emdash/
 
-Sitemap: https://minastro.pages.dev/sitemap-index.xml
+Sitemap: /sitemap.xml

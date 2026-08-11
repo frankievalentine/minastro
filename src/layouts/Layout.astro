@@ -3,6 +3,7 @@ import "../styles/global.css";
 import { ClientRouter } from "astro:transitions";
 import Search from "../components/Search.astro";
 import { siteConfig } from "../site.config";
+import { getMenu, getSiteSettings } from "emdash";
 
 interface Props {
   currentPage?: string;
@@ -10,14 +11,54 @@ interface Props {
   title?: string;
 }
 
+const [cmsSettings, primaryMenu] = await Promise.all([
+  getSiteSettings().catch(() => null),
+  getMenu("primary").catch(() => null),
+]);
+
+const cmsTitle =
+  typeof cmsSettings?.title === "string" && cmsSettings.title.trim()
+    ? cmsSettings.title
+    : null;
+const cmsTagline =
+  typeof cmsSettings?.tagline === "string" && cmsSettings.tagline.trim()
+    ? cmsSettings.tagline
+    : null;
+const cmsLogo =
+  typeof cmsSettings?.logo?.url === "string" && cmsSettings.logo.url.trim()
+    ? cmsSettings.logo.url
+    : null;
+const siteName = cmsTitle ?? siteConfig.title;
+const siteTagline = cmsTagline ?? siteConfig.location;
+
+const cmsNav = (primaryMenu?.items ?? [])
+  .filter(
+    (item) =>
+      typeof item?.label === "string" &&
+      item.label.trim() &&
+      typeof item?.url === "string" &&
+      item.url.trim(),
+  )
+  .map((item) => ({
+    label: item.label,
+    href: item.url,
+    target: typeof item.target === "string" ? item.target : undefined,
+  }));
+const primaryNav =
+  cmsNav.length > 0
+    ? cmsNav
+    : siteConfig.nav.map((item) => ({ ...item, target: undefined }));
+
 const {
-  title = siteConfig.title,
-  description = siteConfig.description,
+  title: pageTitle,
+  description: pageDescription,
   currentPage = "/",
 } = Astro.props;
+const title = pageTitle ?? siteName;
+const description = pageDescription ?? cmsTagline ?? siteConfig.description;
 
 const siteTitle =
-  title === siteConfig.title ? title : `${title} • ${siteConfig.title}`;
+  title === siteName ? title : `${title} • ${siteName}`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
 // Nav icon paths keyed by href
@@ -35,7 +76,7 @@ function isActive(href: string): boolean {
   return currentPage === href || currentPage.startsWith(`${href}/`);
 }
 
-const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
+const avatarInitial = siteName.charAt(0).toUpperCase();
 ---
 
 <!doctype html>
@@ -50,7 +91,7 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
     <title>{siteTitle}</title>
     <meta name="title" content={siteTitle}>
     <meta name="description" content={description}>
-    <meta name="author" content={siteConfig.name}>
+    <meta name="author" content={siteName}>
     <link rel="canonical" href={canonicalURL}>
 
     <!-- Icons -->
@@ -63,9 +104,9 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
     <meta property="og:url" content={canonicalURL}>
     <meta property="og:title" content={siteTitle}>
     <meta property="og:description" content={description}>
-    <meta property="og:site_name" content={siteConfig.title}>
+    <meta property="og:site_name" content={siteName}>
     <meta property="og:locale" content="en_US">
-    <meta property="article:author" content={siteConfig.name}>
+    <meta property="article:author" content={siteName}>
 
     <!-- Twitter Card -->
     <meta property="twitter:card" content="summary_large_image">
@@ -155,10 +196,12 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
 
           <div role="group">
             <ul>
-              {siteConfig.nav.map((item) => (
+              {primaryNav.map((item) => (
                                 <li>
                                     <a
                                         href={item.href}
+                                        target={item.target}
+                                        rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
                                         aria-current={isActive(item.href) ? "page" : undefined}
                                     >
                                         <svg
@@ -194,8 +237,8 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
               <img
                 id="sidebar-avatar"
                 class="size-8 shrink-0 rounded-lg object-cover ring-1 ring-sidebar-border"
-                src={siteConfig.avatar}
-                alt={siteConfig.name}
+                src={cmsLogo ?? siteConfig.avatar}
+                alt={siteName}
               >
               <div
                 class="size-8 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground items-center justify-center text-sm font-semibold ring-1 ring-sidebar-border"
@@ -207,10 +250,10 @@ const avatarInitial = siteConfig.name.charAt(0).toUpperCase();
               <div class="grid flex-1 text-left leading-tight min-w-0">
                 <span
                   class="truncate text-sm font-semibold text-sidebar-foreground"
-                  >{siteConfig.name}</span
+                  >{siteName}</span
                 >
                 <span class="truncate text-xs text-muted-foreground"
-                  >{siteConfig.location}</span
+                  >{siteTagline}</span
                 >
               </div>
               <!-- Chevron up indicator -->
