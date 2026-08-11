@@ -22,21 +22,101 @@ Open `http://localhost:4321`. The admin panel is at `http://localhost:4321/_emda
 
 ## Configuration
 
-### Site identity
+Configuration is split across two layers. EmDash CMS values at runtime take precedence for identity and navigation; `site.config.ts` owns everything else and serves as the resilient fallback.
 
-Everything personal is in **`src/site.config.ts`**:
+### Layer 1: EmDash CMS (runtime, takes precedence)
+
+Once EmDash is seeded and running, these values are managed in the admin panel at `/_emdash/admin` and override their `site.config.ts` counterparts:
+
+| Setting | CMS source | Used for |
+|---|---|---|
+| Site title | Settings > title | Page `<title>`, sidebar site name, Open Graph `site_name` |
+| Tagline | Settings > tagline | Sidebar subtitle, page description fallback |
+| Logo | Settings > logo (image) | Sidebar avatar |
+| Primary menu | Menus > Primary Navigation | Sidebar nav links |
+
+These are fetched at runtime by `Layout.astro` via `getSiteSettings()` and `getMenu("primary")`. If the CMS is unreachable or not yet seeded, the layout falls back to `site.config.ts` values.
+
+### Layer 2: `src/site.config.ts` (build-time, fallback)
 
 ```typescript
 export const siteConfig: SiteConfig = {
   name: "Your Name",
-  title: "Your Name",
-  description: "Your Name's personal website.",
-  url: "https://your-domain.com",   // <-- used as EmDash siteUrl
-  // ...
+  title: "Your Name",              // fallback for CMS title
+  description: "Your Name's personal website.",  // fallback for CMS tagline
+  url: "https://your-domain.com",  // canonical URL, passed to EmDash as siteUrl
+  avatar: "/avatar.svg",           // fallback for CMS logo
+  location: "Your City",           // fallback for sidebar subtitle when no CMS tagline
+  roles: ["Software Engineer", "Open Source", "Builder"],
+  bio: "I'm a software engineer...",
+  social: {                        // NOT managed in CMS — edit here only
+    github: "https://github.com/yourusername",
+    twitter: "https://x.com/yourusername",
+    email: "hello@your-domain.com",
+  },
+  newsletter: {                    // NOT managed in CMS — edit here only
+    enabled: true,
+    formUrl: "https://...",
+    description: "...",
+  },
+  analytics: {                     // NOT managed in CMS — edit here only
+    enabled: false,
+    url: "https://...",
+    domain: "your-domain.com",
+  },
+  nav: [                           // fallback for CMS primary menu
+    { label: "About", href: "/" },
+    { label: "Posts", href: "/posts" },
+    { label: "Projects", href: "/projects" },
+    { label: "Newsletter", href: "/newsletter" },
+  ],
 };
 ```
 
-The `url` field is read by `astro.config.mjs` and passed to EmDash as `siteUrl`. Change it before deploying.
+**What `site.config.ts` owns exclusively** (no CMS equivalent):
+- `url` -- canonical domain; read by `astro.config.mjs` and passed to EmDash as `siteUrl`
+- `location`, `roles`, `bio` -- personal info rendered on the home page
+- `social` -- GitHub, X/Twitter, LinkedIn, email links in the sidebar popover
+- `newsletter` -- toggle and form endpoint URL
+- `analytics` -- toggle, script URL, and domain for Partytown
+
+**What `site.config.ts` provides as fallback** (overridden by CMS when available):
+- `title`, `description` -- overridden by CMS title/tagline
+- `avatar` -- overridden by CMS logo
+- `nav` -- overridden by CMS primary menu
+
+The `url` field must be set to your production domain before deploying. Change it in `site.config.ts`.
+
+### `.emdash/seed.json` -- one-time initialization
+
+The seed file at `.emdash/seed.json` defines the EmDash content model (collections, fields, taxonomies) and initializes default values for CMS settings (title, tagline, URL, social links) and the primary menu. It is applied once via `bunx emdash seed apply .emdash/seed.json` after the admin account is created.
+
+**What seed.json is**: a one-time bootstrap that populates the CMS with template defaults so you don't start from a blank admin panel.
+
+**What seed.json is not**: a bidirectional sync mechanism. After seeding, all CMS values (title, tagline, logo, menu, social) are managed exclusively through the EmDash admin UI. Editing `seed.json` post-deploy has no effect unless you re-apply it, which would overwrite any changes made in the admin.
+
+### What to edit before first deploy
+
+Before deploying, edit these files:
+
+| File | What to change |
+|---|---|
+| `src/site.config.ts` | `url` (your domain), `name`, `title`, `description`, `avatar`, `location`, `roles`, `bio`, `social` links, `newsletter.formUrl`, `analytics` config |
+| `.emdash/seed.json` | `settings.title`, `settings.tagline`, `settings.url`, `settings.social` (initial CMS values), `menus` items if you want different default nav |
+| `astro.config.mjs` | `allowedOrigins` (add your production URL) |
+| `public/avatar.svg` | Replace with your own avatar |
+| `public/favicon.svg`, `public/favicon.ico` | Replace with your own favicon |
+| `public/manifest.webmanifest` | Update name and icons |
+
+### What to edit in the EmDash admin after deploy
+
+After seeding, manage these through the admin UI at `/_emdash/admin`:
+
+- Site title, tagline, logo image
+- Primary navigation menu (add/remove/reorder links)
+- Social links in Settings (these are CMS-level; note the sidebar popover reads from `site.config.ts` -- see note above)
+- Blog posts and projects as content entries
+- Tags taxonomy
 
 ### EmDash WebAuthn origins
 
@@ -76,7 +156,7 @@ Copy `.dev.vars.example` to `.dev.vars` and fill in:
 
 | Path | Description |
 |---|---|
-| `src/site.config.ts` | All site identity and feature configuration |
+| `src/site.config.ts` | Build-time config: canonical URL, social, newsletter, analytics, bio, roles, location; fallback for CMS title/tagline/logo/nav |
 | `src/worker.ts` | EmDash Cloudflare Worker entry point (single re-export) |
 | `src/live.config.ts` | EmDash live collection definition |
 | `src/content/posts/` | Blog posts (`.md` and `.mdx`) |

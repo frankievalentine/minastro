@@ -31,7 +31,12 @@ Astro 7 SSR site deployed to Cloudflare Workers. All output is server-rendered (
 
 ### Layout & Navigation
 
-`src/layouts/Layout.astro` is the single shared layout for every page. It renders a persistent left sidebar with nav links driven by `siteConfig.nav`, a user popover with social links and theme toggle, and a mobile top bar. All pages pass `currentPage` to this layout to drive `aria-current` on nav items. Identity and nav items are configured in `src/site.config.ts`.
+`src/layouts/Layout.astro` is the single shared layout for every page. It renders a persistent left sidebar with nav links, a user popover with social links and theme toggle, and a mobile top bar. All pages pass `currentPage` to this layout to drive `aria-current` on nav items.
+
+**Identity and navigation use a two-layer model:**
+- At runtime, `Layout.astro` fetches `getSiteSettings()` and `getMenu("primary")` from EmDash CMS. CMS title, tagline, logo, and primary menu items take precedence when available.
+- `src/site.config.ts` provides the fallback values for title, tagline/description, avatar, and nav when the CMS is unreachable or not yet seeded.
+- Social links (GitHub, X/Twitter, LinkedIn, email), newsletter config, and analytics config are read exclusively from `site.config.ts` -- they have no CMS equivalent.
 
 ### Styling
 
