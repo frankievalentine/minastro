@@ -1,0 +1,10 @@
+# EmDash environment variables (local dev only — set real values via `bunx wrangler secret put`)
+# Only the variables listed below are recognized by EmDash.
+# See https://docs.emdashcms.com/reference/configuration/#environment-variables
+
+EMDASH_SITE_URL=http://localhost:4321
+EMDASH_ALLOWED_ORIGINS=
+EMDASH_ENCRYPTION_KEY=change-me-to-a-random-64-char-string
+EMDASH_PREVIEW_SECRET=
+EMDASH_IP_SALT=
+EMDASH_AUTH_SECRET=

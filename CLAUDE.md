@@ -5,21 +5,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-bun run dev          # Start dev server at localhost:4321
-bun run build        # Build production site to ./dist/
-bun run preview      # Preview production build locally
-bun run cfpreview    # Preview via Wrangler against Cloudflare Pages
-bun run cfdeploy     # Deploy to Cloudflare Pages
-bun run cftypes      # Generate Cloudflare Workers types
+bun run dev              # Start dev server at localhost:4321
+bun run build            # Build production SSR output to ./dist/
+bun run preview          # Preview production build locally
+bun run cf:dev           # Run full Workers stack locally via Wrangler (D1, R2, secrets)
+bun run cf:deploy        # Deploy worker + assets to Cloudflare
+bun run cf:deploy:production  # Deploy to the production environment
+bun run check            # Type-check and lint (astro check + ESLint)
+bun run fix              # Auto-fix ESLint issues
+bun run migrate:generate # Parse Markdown/MDX content and generate EmDash migration manifest
+bun run migrate:dry-run  # Parse and validate without writing files
 ```
 
-**Important**: Search is powered by Pagefind, which requires a built index. Always run `bun run build` before `bun run dev` if search functionality is needed.
+**Important**: Search is powered by EmDash runtime search (FTS indexes maintained by database triggers). No build-time index is needed. The admin panel is at `/_emdash/admin`.
 
 There is no test suite.
 
 ## Architecture
 
-Astro 5 static site deployed to Cloudflare Pages. All output is pre-rendered (`output: 'static'`). The Cloudflare adapter is present for platform proxy support and type generation, not for SSR.
+Astro 7 SSR site deployed to Cloudflare Workers. All output is server-rendered (`output: 'server'`). The Cloudflare adapter runs the Astro server inside a Cloudflare Worker, with D1 for storage and R2 for media.
+
+### Entry Point
+
+`src/worker.ts` is a single re-export from `@emdash-cms/cloudflare/worker` which owns the `fetch()` and `scheduled()` handlers. Wrangler config sets `main: "./src/worker.ts"` and `triggers.crons` for scheduled publishing.
 
 ### Layout & Navigation
 
@@ -39,7 +47,7 @@ Toggled by adding/removing the `.dark` class on `<html>`. The current state is p
 
 ### Search
 
-`src/components/Search.astro` implements a `<dialog>` using the basecoat `command-dialog` pattern. Pagefind is lazy-loaded on first open from `/pagefind/pagefind.js` (generated post-build). A custom Vite plugin (`pagefindExternalPlugin` in `astro.config.mjs`) marks that path as external so it's never bundled. Opened via CMD+K / CTRL+K or the sidebar search button.
+`src/components/Search.astro` implements a `<dialog>` using the basecoat `command-dialog` pattern. EmDash runtime search is used via the `/_emdash/api/search` endpoint. FTS indexes are created once and maintained by database triggers — no periodic rebuild is required. Opened via CMD+K / CTRL+K or the sidebar search button.
 
 ### Content
 
@@ -53,10 +61,14 @@ Blog posts live in `src/content/posts/` as `.md` or `.mdx`. Projects live in `sr
 
 Optional analytics loaded via `@astrojs/partytown` (offloaded to a web worker). Disabled by default. Enable by setting `siteConfig.analytics.enabled = true` and providing `analytics.url` and `analytics.domain`. The script tag uses `type="text/partytown"`.
 
+### Sitemap
+
+EmDash provides a built-in runtime sitemap at `/sitemap.xml` (index) and `/sitemap-{collection}.xml` (per-collection). No build-time sitemap generation is needed.
+
 ### Utilities
 
 `src/utils.ts` exports two functions used across pages: `formatDate(date: Date)` and `readingTime(content: string)`.
 
 ### Deployment
 
-Pushes to `main` trigger automatic Cloudflare Pages deploys. Manual deploy: `bunx wrangler login && bun run cfdeploy`.
+Pushes to `main` trigger automatic Cloudflare Workers deploys. Manual deploy: `bunx wrangler login && bun run cf:deploy`. Wrangler runs `bun run build` automatically before deploying (configured via `build.command` in `wrangler.jsonc`).
