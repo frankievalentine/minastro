@@ -21,6 +21,7 @@
     "check": "astro check && eslint .",
     "fix": "eslint --fix .",
     "seed:validate": "bun run scripts/validate-seed.ts",
+    "types:generate": "emdash types",
     "newsletter:migrate:local": "bunx wrangler d1 migrations apply NEWSLETTER_DB --local",
     "newsletter:migrate:remote": "bunx wrangler d1 migrations apply NEWSLETTER_DB --remote"
   },
