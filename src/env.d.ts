@@ -14,7 +14,6 @@ declare global {
   }
 }
 
-/* Newsletter bindings are optional -- only present when the user has
-   provisioned them and merged wrangler.newsletter.jsonc into their config.
-   Use the isNewsletterConfigured() type guard in src/lib/newsletter.ts
-   to narrow the runtime env at the call site. */
+/* Newsletter bindings are optional and are added by cloudflare:setup when
+   newsletter provisioning is enabled. Use isNewsletterConfigured() in
+   src/lib/newsletter.ts to narrow the runtime env at the call site. */

@@ -67,8 +67,8 @@ newsletter: {
 ### Bindings (wrangler config)
 
 The newsletter uses three bindings that are **separate from the main EmDash
-bindings**. They are not included in the active `wrangler.jsonc` by default.
-See `wrangler.newsletter.jsonc.example` for the full shape.
+bindings**. The recommended setup flow writes them to `wrangler.jsonc` when
+newsletter provisioning is enabled.
 
 | Binding | Type | Purpose |
 |---|---|---|
@@ -114,93 +114,6 @@ full local flow, configure those bindings in `wrangler.jsonc` (or use the
 automated setup flow) and run the Worker with Wrangler. The public newsletter
 page intentionally remains visible in its disabled state until all production
 requirements are configured.
-
-### Manual fallback
-
-Use the following sections only when the automated setup flow cannot be used.
-They describe the same bindings and migrations that `cloudflare:setup` applies.
-
-### 1. Create the D1 database
-
-```bash
-bunx wrangler d1 create minastro-newsletter
-```
-
-Copy the returned `database_id` and add it to your wrangler config alongside
-the existing `DB` binding:
-
-```jsonc
-"d1_databases": [
-  { "binding": "DB",           "database_name": "minastro",              "database_id": "<existing-id>" },
-  { "binding": "NEWSLETTER_DB","database_name": "minastro-newsletter",   "database_id": "<new-id>", "migrations_dir": "newsletter-migrations" }
-]
-```
-
-### 2. Apply the migration
-
-**Important**: Bindings must be configured in `wrangler.jsonc` **before**
-running the migration. The `d1 migrations apply` command resolves the
-database via the binding name in your config. Without the binding in place,
-the command will fail.
-
-The migration uses Wrangler's `d1 migrations` system (not `d1 execute`).
-The `migrations_dir` is set to `newsletter-migrations` inside the
-`NEWSLETTER_DB` database entry.
-
-```bash
-# Apply locally (uses local D1 data via Wrangler dev)
-bunx wrangler d1 migrations apply NEWSLETTER_DB --local
-
-# Apply to production
-bunx wrangler d1 migrations apply NEWSLETTER_DB --remote
-```
-
-### 3. Set up Email Sending
-
-Cloudflare Email Sending requires a **Workers Paid** plan (the free plan does
-not include the `send_email` binding). It is designed for **transactional**
-email only -- not for bulk campaigns.
-
-1. Go to the [Cloudflare Dashboard -> Email -> Email Sending](https://dash.cloudflare.com/?to=/:account/email/sending).
-2. Add and verify your sending domain (e.g. `newsletter.your-domain.com` or
-   `your-domain.com`). This involves adding DNS TXT records (SPF, DKIM, DMARC).
-3. Once verified, add the `send_email` binding to your wrangler config:
-
-```jsonc
-"send_email": [
-  { "name": "NEWSLETTER_EMAIL", "remote": true, "allowed_sender_addresses": ["newsletter@your-domain.com"] }
-]
-```
-
-The `remote: true` flag tells Wrangler to send real email even when running
-under `wrangler dev`. This is necessary because Cloudflare Email Sending has
-no local emulator -- without `remote: true`, `wrangler dev` would silently
-drop all outbound email. Once the adopter has completed the onboarding steps
-above (verified sending domain, configured bindings), `wrangler dev` will
-send real confirmation emails to the addresses provided.
-
-The `allowed_sender_addresses` array specifies which `from` addresses the
-binding is allowed to use. The `senderAddress` in `site.config.ts` must match
-one of these addresses.
-
-### 4. Create a Turnstile widget
-
-1. Go to the [Cloudflare Dashboard -> Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile).
-2. Create a new widget for your domain.
-3. Copy the **Site Key** (public) into `site.config.ts` as `turnstileSiteKey`.
-4. Copy the **Secret Key** and set it as a secret:
-
-```bash
-bunx wrangler secret put TURNSTILE_SECRET_KEY
-```
-
-### 5. Set the consent version
-
-If you have a privacy policy, set `consentVersion` in `site.config.ts` to
-match the version your policy was at when you launched. Bump it whenever
-the policy changes materially.
-
----
 
 ## Security & compliance
 

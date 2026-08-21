@@ -12,7 +12,7 @@ dist/
 .idea/
 
 README.md
-CLAUDE.md
+AGENTS.md
 wrangler.jsonc
 Dockerfile
 .dockerignore
