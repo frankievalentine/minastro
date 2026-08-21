@@ -1,12 +1,10 @@
 // @ts-check
 
 import cloudflare from "@astrojs/cloudflare";
-import mdx from "@astrojs/mdx";
 import partytown from "@astrojs/partytown";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
-import expressiveCode from "astro-expressive-code";
 import emdash from "emdash/astro";
 import { d1, r2 } from "@emdash-cms/cloudflare";
 import { siteConfig } from "./src/site.config.ts";
@@ -15,13 +13,6 @@ import { siteConfig } from "./src/site.config.ts";
 export default defineConfig({
   site: siteConfig.url,
   integrations: [
-    expressiveCode({
-      themes: ["catppuccin-mocha", "catppuccin-latte"],
-      useDarkModeMediaQuery: false,
-      themeCssSelector: (theme) =>
-        theme.type === "dark" ? ".dark" : ":root:not(.dark)",
-    }),
-    mdx(),
     react(),
     partytown({
       config: {
@@ -35,6 +26,15 @@ export default defineConfig({
       storage: r2({ binding: "MEDIA" }),
     }),
   ],
+  markdown: {
+    shikiConfig: {
+      themes: {
+        light: "catppuccin-latte",
+        dark: "catppuccin-mocha",
+      },
+      defaultColor: false,
+    },
+  },
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",

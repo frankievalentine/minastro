@@ -1,0 +1,98 @@
+---
+export const prerender = false;
+
+import { getEmDashEntry } from "emdash";
+import { PortableText } from "emdash/ui";
+import type { PortableTextBlock } from "emdash";
+import BackToTop from "../components/ui/BackToTop.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+import Layout from "../layouts/Layout.astro";
+
+const slug = Astro.params.slug;
+if (!slug) {
+  return new Response(null, { status: 404 });
+}
+
+const { entry, error, isPreview } = await getEmDashEntry("pages", slug);
+
+if (error) {
+  throw error;
+}
+
+if (!entry) {
+  return new Response(null, { status: 404 });
+}
+
+const page = entry.data as {
+  content?: unknown;
+  description?: unknown;
+  slug?: unknown;
+  status?: unknown;
+  title?: unknown;
+};
+
+if (page.status !== "published" && !isPreview) {
+  return new Response(null, { status: 404 });
+}
+
+if (typeof page.title !== "string" || typeof page.description !== "string") {
+  throw new Error("The CMS page is missing its required title or description.");
+}
+
+const pageSlug = typeof page.slug === "string" ? page.slug : slug;
+const content = Array.isArray(page.content)
+  ? (page.content as PortableTextBlock[])
+  : [];
+---
+
+<Layout
+  title={page.title}
+  description={page.description}
+  currentPage={`/${pageSlug}`}
+>
+  <div class="mx-auto max-w-2xl px-6 py-12 md:py-16">
+    <header class="mb-8">
+      <h1 class="mb-3 text-3xl font-bold leading-tight tracking-tight text-foreground">
+        {page.title}
+      </h1>
+      <p class="leading-relaxed text-muted-foreground">{page.description}</p>
+    </header>
+
+    <div role="separator" class="mb-8 border-t border-border"></div>
+
+    <article class="prose prose-sm prose-neutral max-w-none dark:prose-invert">
+      <PortableText value={content} components={{ type: { code: CodeBlock } }} />
+    </article>
+  </div>
+
+  <BackToTop />
+</Layout>
+
+<style is:global>
+  @reference "../styles/global.css";
+
+  .prose h2 {
+    @apply mt-8 mb-3 text-xl font-semibold text-foreground;
+  }
+  .prose h3 {
+    @apply mt-6 mb-2 text-base font-semibold text-foreground;
+  }
+  .prose p {
+    @apply mb-4 text-sm leading-relaxed text-muted-foreground;
+  }
+  .prose ul {
+    @apply mb-4 list-disc space-y-1 pl-5 text-sm text-muted-foreground;
+  }
+  .prose ol {
+    @apply mb-4 list-decimal space-y-1 pl-5 text-sm text-muted-foreground;
+  }
+  .prose strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose a {
+    @apply text-foreground underline underline-offset-4 transition-colors hover:text-muted-foreground;
+  }
+  .prose blockquote {
+    @apply border-l-2 border-border pl-4 text-sm italic leading-relaxed text-muted-foreground;
+  }
+</style>

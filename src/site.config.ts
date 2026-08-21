@@ -12,8 +12,16 @@ export interface SiteConfig {
   nav: Array<{ label: string; href: string }>;
   newsletter: {
     enabled: boolean;
-    formUrl?: string;
     description?: string;
+    /** Verified sender address for transactional emails. Must match an address
+     *  in the send_email binding's allowed_sender_addresses. */
+    senderAddress: string;
+    /** Public Turnstile site key for widget rendering. */
+    turnstileSiteKey?: string;
+    /** Consent version string (semver-like, e.g. "1.0"). Increment when privacy policy changes. */
+    consentVersion: string;
+    /** Expected hostname for Turnstile token validation. Must match the widget's data-domain. */
+    expectedHostname: string;
   };
   roles: string[];
   social: {
@@ -41,10 +49,13 @@ export const siteConfig: SiteConfig = {
     email: "hello@your-domain.com",
   },
   newsletter: {
-    enabled: true,
-    formUrl: "https://your-newsletter-service.com/subscribe",
+    enabled: false,
     description:
       "Occasional notes on engineering, projects, and ideas. No spam.",
+    senderAddress: "newsletter@your-domain.com",
+    turnstileSiteKey: "",
+    consentVersion: "1.0",
+    expectedHostname: "your-domain.com",
   },
   analytics: {
     enabled: false,
@@ -55,6 +66,5 @@ export const siteConfig: SiteConfig = {
     { label: "About", href: "/" },
     { label: "Posts", href: "/posts" },
     { label: "Projects", href: "/projects" },
-    { label: "Newsletter", href: "/newsletter" },
   ],
 };

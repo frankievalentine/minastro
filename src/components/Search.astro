@@ -6,7 +6,7 @@
 >
   <div class="command">
     <header>
-      <h2 id="search-dialog-title" class="sr-only">Search pages and posts</h2>
+      <h2 id="search-dialog-title" class="sr-only">Search posts and projects</h2>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
@@ -23,8 +23,8 @@
       <input
         id="search-input"
         type="text"
-        placeholder="Search pages and posts"
-        aria-label="Search pages and posts"
+        placeholder="Search posts and projects"
+        aria-label="Search posts and projects"
         autocomplete="off"
         autocorrect="off"
         spellcheck="false"
@@ -130,7 +130,7 @@
         const title = escapeHtml(result.title || "Untitled result");
         const collection = escapeHtml(result.collection);
         const snippet = result.snippet
-          ? `<span class="mt-1 line-clamp-2 text-xs text-muted-foreground">${result.snippet}</span>`
+          ? `<span class="mt-1 line-clamp-2 text-xs text-muted-foreground">${escapeHtml(result.snippet)}</span>`
           : "";
         return `<a role="menuitem" href="${href}" class="block px-3 py-2.5 outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground">
           <span class="block truncate text-sm font-medium">${title}</span>

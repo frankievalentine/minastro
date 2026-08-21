@@ -3,4 +3,6 @@ node_modules/
 .astro/
 .wrangler/
 .claude/
+.opencode/
 .dev.vars
+emdash-env.d.ts

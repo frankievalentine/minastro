@@ -1,0 +1,100 @@
+---
+/**
+ * Portable Text code block component with Shiki syntax highlighting.
+ *
+ * Renders code blocks from EmDash Portable Text `_type: "code"` nodes using
+ * Shiki with Catppuccin Latte (light) and Catppuccin Mocha (dark) themes.
+ *
+ * The output is wrapped in a `.code-block` div matching the existing copy-button
+ * enhancement contract. The copy button reads `pre > code` textContent, so the
+ * filename header is excluded from copy automatically.
+ *
+ * Usage (in CMS branch of post/project pages):
+ *   <PortableText value={content} components={{ type: { code: CodeBlock } }} />
+ */
+
+import { highlightCode } from "../lib/shiki";
+
+export interface Props {
+  node: {
+    _type: "code";
+    _key: string;
+    code: string;
+    language?: string;
+    filename?: string;
+  };
+}
+
+const { node } = Astro.props;
+
+if (!node?.code) {
+  return null;
+}
+
+const { code, language, filename } = node;
+const highlighted = await highlightCode(code, language);
+---
+
+{
+  filename ? (
+    <div class="code-block code-block--with-filename">
+      <div class="code-block__filename">{filename}</div>
+      <Fragment set:html={highlighted} />
+    </div>
+  ) : (
+    <div class="code-block">
+      <Fragment set:html={highlighted} />
+    </div>
+  )
+}
+
+<style is:global>
+  @reference "../styles/global.css";
+
+  /* Shiki fences inside a .code-block inherit the same surface as Astro fences. */
+  .code-block pre.shiki {
+    margin: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 1rem;
+    color: var(--shiki-light);
+    background: var(--shiki-light-bg);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .code-block pre.shiki span {
+    color: var(--shiki-light);
+  }
+
+  html.dark .code-block pre.shiki {
+    color: var(--shiki-dark);
+    background: var(--shiki-dark-bg);
+  }
+
+  html.dark .code-block pre.shiki span {
+    color: var(--shiki-dark);
+  }
+
+  /* Filename bar above the code fence. */
+  .code-block__filename {
+    font-size: 0.75rem;
+    font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+      "Liberation Mono", monospace;
+    color: var(--muted-foreground);
+    background: color-mix(in oklch, var(--shiki-light-bg) 80%, var(--border));
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  html.dark .code-block__filename {
+    background: color-mix(in oklch, var(--shiki-dark-bg) 80%, var(--border));
+  }
+
+  /* When a filename is present, the pre loses its top rounded corners. */
+  .code-block--with-filename pre.shiki {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+</style>

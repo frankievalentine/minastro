@@ -15,28 +15,29 @@
     "build": "astro telemetry disable && astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "cf:dev": "wrangler dev",
-    "cf:deploy": "wrangler deploy",
-    "cf:deploy:production": "wrangler deploy --env production",
+    "cf:dev": "bun run build && wrangler dev",
+    "cf:deploy": "bun run build && wrangler deploy",
+    "cloudflare:setup": "bun run scripts/setup-cloudflare.ts",
     "check": "astro check && eslint .",
     "fix": "eslint --fix .",
-    "migrate:generate": "bun run scripts/migrate-content.ts",
-    "migrate:dry-run": "bun run scripts/migrate-content.ts --dry-run"
+    "seed:validate": "bun run scripts/validate-seed.ts",
+    "newsletter:migrate:local": "bunx wrangler d1 migrations apply NEWSLETTER_DB --local",
+    "newsletter:migrate:remote": "bunx wrangler d1 migrations apply NEWSLETTER_DB --remote"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.0",
-    "@astrojs/mdx": "^7.0.5",
     "@astrojs/partytown": "^2.1.7",
     "@astrojs/react": "^6.0.2",
     "@astrojs/rss": "^4.0.19",
     "@emdash-cms/cloudflare": "^0.32.0",
+    "@shikijs/engine-javascript": "^4.4.3",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.2.0",
-    "astro-expressive-code": "^0.41.7",
     "basecoat-css": "^0.3.11",
     "emdash": "^0.32.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "shiki": "^4.4.3",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
@@ -49,15 +50,8 @@
     "eslint": "^9.39.5",
     "eslint-plugin-astro": "^1.7.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
-    "gray-matter": "^4.0.3",
-    "mdast-util-to-string": "^4.0.0",
-    "remark-frontmatter": "^5.0.0",
-    "remark-gfm": "^4.0.1",
-    "remark-mdx": "^3.1.1",
-    "remark-parse": "^11.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0",
-    "unified": "^11.0.5",
     "wrangler": "^4.120.1"
   }
 }

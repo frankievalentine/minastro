@@ -1,7 +1,134 @@
 @import "tailwindcss";
 @import "basecoat-css";
 
+/* Keep Tailwind's dark utilities aligned with Basecoat's html.dark contract. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Expand the sidebar footer tap area to the full available space. */
 .sidebar nav > footer {
   padding: 0;
+}
+
+/* Astro's dual-theme Shiki output exposes these variables on the fence and
+   token spans. Keep the fence surface and every token in the same theme. */
+.code-block {
+  position: relative;
+  margin-block: 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 0.125rem);
+  background: var(--shiki-light-bg);
+}
+
+.code-block pre.astro-code,
+.code-block pre.shiki {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+  color: var(--shiki-light);
+  background: var(--shiki-light-bg);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  -webkit-overflow-scrolling: touch;
+}
+
+.code-block pre.astro-code span,
+.code-block pre.shiki span {
+  color: var(--shiki-light);
+}
+
+html.dark .code-block,
+html.dark .code-block pre.astro-code,
+html.dark .code-block pre.shiki {
+  color: var(--shiki-dark);
+  background: var(--shiki-dark-bg);
+}
+
+html.dark .code-block pre.astro-code span,
+html.dark .code-block pre.shiki span {
+  color: var(--shiki-dark);
+}
+
+.code-block__copy {
+  position: absolute;
+  top: 0.625rem;
+  right: 0.625rem;
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in oklch, var(--border) 80%, var(--foreground));
+  border-radius: calc(var(--radius) - 0.125rem);
+  color: var(--muted-foreground);
+  background: color-mix(in oklch, var(--background) 90%, transparent);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(0.5rem);
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+
+.code-block__copy svg {
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.code-block__copy:not([data-copy-state]) .code-block__icon--copy,
+.code-block__copy[data-copy-state="pending"] .code-block__icon--copy {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.code-block__copy[data-copy-state="success"] .code-block__icon--success,
+.code-block__copy[data-copy-state="error"] .code-block__icon--error {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.code-block__copy:hover {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--foreground);
+}
+
+.code-block__copy:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.code-block__copy[data-copy-state="success"] {
+  color: var(--foreground);
+}
+
+.code-block__copy[data-copy-state="error"] {
+  color: var(--destructive);
+}
+
+.code-block__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-block__copy,
+  .code-block__copy svg {
+    transition: none;
+  }
 }

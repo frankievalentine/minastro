@@ -8,12 +8,21 @@ const { entries: posts, error } = await getEmDashCollection("posts", {
 });
 
 if (error) {
-  console.error("Failed to load posts:", error);
+  throw error;
 }
 
 const sortedPosts = (posts ?? []).sort(
   (a, b) => (b.data.publishedAt?.getTime() ?? 0) - (a.data.publishedAt?.getTime() ?? 0)
 );
+
+const featuredImage = (value: unknown, alt: string) => {
+  if (typeof value === "object" && value !== null && "featuredImage" in value) value = value.featuredImage;
+  if (typeof value === "string" && value.trim()) return { url: value, alt };
+  if (typeof value === "object" && value !== null && "url" in value && typeof value.url === "string" && value.url.trim()) {
+    return { url: value.url, alt: "alt" in value && typeof value.alt === "string" && value.alt.trim() ? value.alt : alt };
+  }
+  return undefined;
+};
 ---
 
 <Layout title="Posts" currentPage="/posts">
@@ -49,45 +58,74 @@ const sortedPosts = (posts ?? []).sort(
       Writing on engineering, projects, and ideas worth sharing.
     </p>
 
-    <!-- Post list -->
-    <div class="grid gap-4">
-      {sortedPosts.map((post) => (
-        <a href={`/posts/${post.data.slug}`} class="block group">
-          <div class="card transition-colors group-hover:bg-accent/40">
-            <section>
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0 flex-1">
-                  <h2 class="text-base font-semibold text-foreground leading-snug group-hover:text-foreground mb-1">
-                    {post.data.title}
-                  </h2>
-                  <p class="text-sm text-muted-foreground leading-relaxed line-clamp-2">
-                    {post.data.description}
-                  </p>
+    <section aria-labelledby="post-example-heading" class="mb-12">
+      <div class="mb-4">
+        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Example output</p>
+        <h2 id="post-example-heading" class="mt-1 text-xl font-semibold tracking-tight">A complete post card</h2>
+        <p class="mt-1.5 text-sm text-muted-foreground">This static example shows how the template presents the available EmDash fields.</p>
+      </div>
+      <a href="/posts/example" class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <article class="card overflow-hidden transition-colors group-hover:bg-accent/40">
+          <section>
+            <img class="mb-5 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src="/featured-post.svg" alt="Abstract editorial lines and shapes representing a published article" />
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0 flex-1">
+                <div class="mb-2 flex flex-wrap items-center gap-2">
+                  <span class="badge-secondary text-xs">Rich content</span>
+                  <span class="text-xs text-muted-foreground">Portable Text</span>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0 mt-1 transition-transform group-hover:translate-x-0.5" aria-hidden="true">
-                  <path d="M5 12h14"/>
-                  <path d="m12 5 7 7-7 7"/>
-                </svg>
+                <h3 class="text-base font-semibold leading-snug text-foreground group-hover:underline">Designing a calmer publishing workflow</h3>
+                <p class="mt-1 text-sm leading-relaxed text-muted-foreground">A practical look at organizing drafts, revisions, images, and publishing without moving content into the codebase.</p>
               </div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <time datetime="2026-08-12">August 12, 2026</time>
+              <span aria-hidden="true">·</span>
+              <span>4 min read</span>
+              <span class="badge-outline text-xs">EmDash</span>
+              <span class="badge-outline text-xs">Workflow</span>
+            </div>
+          </section>
+        </article>
+      </a>
+    </section>
 
-              <div class="flex items-center gap-3 mt-3">
-                <time datetime={post.data.publishedAt?.toISOString()} class="text-xs text-muted-foreground">
-                  {post.data.publishedAt ? formatDate(post.data.publishedAt) : ""}
-                </time>
-                <span class="text-border" aria-hidden="true">·</span>
-                <span class="text-xs text-muted-foreground">{readingTime(extractPlainText(post.data.content))}</span>
-                {post.data.terms?.tag && post.data.terms.tag.length > 0 && (
-                  <div class="flex gap-1.5 flex-wrap">
-                    {post.data.terms.tag.map((tag) => (
-                      <span class="badge-secondary text-xs">{tag.label ?? tag.name}</span>
-                    ))}
+    <section aria-labelledby="published-posts-heading">
+      <div class="mb-4">
+        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Published in EmDash</p>
+        <h2 id="published-posts-heading" class="mt-1 text-xl font-semibold tracking-tight">Latest posts</h2>
+      </div>
+      {sortedPosts.length > 0 ? (
+        <div class="grid gap-4">
+          {sortedPosts.map((post) => (
+            <a href={`/posts/${post.data.slug}`} class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <article class="card h-full transition-colors group-hover:bg-accent/40">
+                <section>
+                  {featuredImage(post.data, post.data.title) && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src={featuredImage(post.data, post.data.title)?.url} alt={featuredImage(post.data, post.data.title)?.alt} loading="lazy" />}
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0 flex-1">
+                      <h3 class="mb-1 text-base font-semibold leading-snug text-foreground">{post.data.title}</h3>
+                      <p class="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{post.data.description}</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-1 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                   </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </a>
-      ))}
-    </div>
+                  <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {post.data.publishedAt && <time datetime={post.data.publishedAt.toISOString()}>{formatDate(post.data.publishedAt)}</time>}
+                    {post.data.publishedAt && <span aria-hidden="true">·</span>}
+                    <span>{readingTime(extractPlainText(post.data.content ?? []))}</span>
+                    {post.data.terms?.tag?.map((tag) => <span class="badge-secondary text-xs">{tag.label ?? tag.name}</span>)}
+                  </div>
+                </section>
+              </article>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div class="rounded-lg border border-dashed border-border px-5 py-8">
+          <h3 class="font-medium">No posts published yet</h3>
+          <p class="mt-1 text-sm text-muted-foreground">New posts will appear here after they are published in the EmDash Posts collection.</p>
+        </div>
+      )}
+    </section>
   </div>
 </Layout>
