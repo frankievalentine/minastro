@@ -8,9 +8,18 @@ bun run dev              # Astro-only frontend development server
 bun run build            # Build production SSR output
 bun run check            # Type-check and lint
 bun run seed:validate    # Validate the EmDash bootstrap seed
+bun run types:generate   # Generate .emdash/types.ts and .emdash/schema.json from a running EmDash URL
 bun run cloudflare:setup # Provision D1/R2, configure bindings, and deploy once
 bun run cf:deploy        # Deploy an already configured Worker
 ```
+
+## EmDash MCP
+
+Use the committed `emdash-docs` MCP server (`.mcp.json`, official public docs,
+read-only, no token) for current EmDash questions instead of relying on
+memory. The deployed-site MCP at `<your-deployment-origin>/_emdash/api/mcp`
+requires authentication and is configured per user/client; never place site
+MCP credentials, PATs, or write/admin scope configs in this repository.
 
 ## Cloudflare provisioning
 
@@ -45,6 +54,12 @@ On an empty database, EmDash applies core migrations and the bundled `.emdash/se
 
 CMS-backed posts, projects, root Pages, RSS, layout navigation, and search query EmDash. Static template examples and newsletter UI are intentional exceptions. Do not add local-content fallbacks for CMS routes: CMS errors must remain visible. The admin is at `/_emdash/admin`; search uses `/_emdash/api/search`. Do not assume custom collections are automatically included in the sitemap without verifying the installed EmDash runtime.
 
-`src/site.config.ts` holds presentation values that have no EmDash equivalent: bio, location, roles, social links, newsletter integration settings, and analytics. CMS settings/menu take precedence for identity and navigation. CMS Pages are rendered by `src/pages/[slug].astro`; fixed Astro routes retain precedence.
+Collection typing comes from generated artifacts: `.emdash/types.ts` (interfaces) and `.emdash/schema.json` (schema snapshot) are committed defaults describing the seeded model so fresh clones type-check. They mirror a running schema, not an independent model: after any content-model change, start a local EmDash runtime with that schema and run `bun run types:generate -- --url <running-url>`, then commit both regenerated files. `src/emdash-types.d.ts` only maps slugs to the generated interfaces via `EmDashCollections`; never hand-maintain field definitions there or duplicate the model elsewhere. Generate from a local runtime or an interactively authenticated instance, and never commit tokens or bake deployment URLs into scripts.
+
+`src/site.config.ts` holds presentation values that have no EmDash equivalent: bio, location, roles, social links, newsletter integration settings, and analytics. CMS settings/menu take precedence for identity (title, tagline, logo), primary navigation, posts-per-page pagination, and visible date preferences (date format and IANA timezone); local config is only a fallback when CMS settings or a primary menu are absent. A resolved primary menu is authoritative even when intentionally empty. Seed settings initialize fresh empty databases only. CMS Pages are rendered by `src/pages/[slug].astro`; fixed Astro routes retain precedence.
+
+Rich text is Portable Text; the editor supports headings; bold, italic, underline, and strikethrough marks; links; lists; blockquotes; and code blocks. Minastro overrides only `_type: "code"` block rendering with its server-side Shiki `src/components/CodeBlock.astro` — a template-level override, not an EmDash-native integration. All other built-in Portable Text components are rendered by the EmDash renderer unless locally overridden.
+
+All CMS Pages currently share the presentation in `src/pages/[slug].astro`. Per-page layouts are not auto-discovered: supporting distinct layouts would require an explicit field-to-layout mapping added to that route.
 
 The newsletter page is visible by default, but signup is disabled until its advanced, opt-in integration is provisioned. Its operational instructions live in `docs/newsletter.md`; `bun run cloudflare:setup` is the supported provisioning path.
