@@ -67,7 +67,10 @@ origin responds at the canonical hostname, then complete the EmDash setup
 wizard at `/_emdash/admin/setup` on that final origin only; register its
 production passkey there. `*.workers.dev` URLs are for temporary testing only:
 they are a different WebAuthn origin from the custom domain and must not
-receive the production passkey.
+receive the production passkey. On the first wizard screen, clear **Include
+sample content (recommended for new sites)** before continuing so the site
+starts without the seed’s example records; schema, settings, and navigation
+are still applied.
 
 ## Architecture
 

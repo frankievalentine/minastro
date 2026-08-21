@@ -41,8 +41,10 @@ review any Wrangler conflict prompt rather than bypassing it. Skip the optional
 newsletter unless I explicitly provide its Email Sending, Turnstile, and Rate
 Limiting prerequisites. Do not expose or commit secrets. Once deployed, verify
 the final HTTPS origin responds, then guide me through /_emdash/admin/setup at
-that origin only and smoke-test the public site and CMS routes. Never register
-the production passkey on a workers.dev origin.
+that origin only. On the first EmDash setup screen, uncheck “Include sample
+content (recommended for new sites)” before continuing, then smoke-test the
+public site and CMS routes. Never register the production passkey on a
+workers.dev origin.
 ```
 
 Setup cannot automate everything. You remain responsible for authenticating
@@ -90,6 +92,11 @@ it and complete the one-time EmDash setup at `/_emdash/admin/setup`. Register
 the production passkey at that final origin: `*.workers.dev` and a custom
 domain are different WebAuthn origins. Use `*.workers.dev` only for temporary
 testing; it should never receive the production passkey.
+
+Minastro’s seed includes optional example posts, projects, and a page. EmDash
+checks **Include sample content (recommended for new sites)** by default; clear
+that checkbox on the first setup screen to create a clean site while retaining
+the schema, settings, and navigation.
 
 For Worker-compatible local development **after bindings are configured**:
 
