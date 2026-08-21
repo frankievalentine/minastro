@@ -1,301 +1,185 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { siteConfig } from "../site.config";
+
+const enabled = siteConfig.newsletter.enabled;
+
+const newsletterConfig = siteConfig.newsletter as typeof siteConfig.newsletter & {
+  turnstileSiteKey?: string;
+  turnstile?: { siteKey?: string };
+};
+const turnstileSiteKey =
+  newsletterConfig.turnstileSiteKey ?? newsletterConfig.turnstile?.siteKey;
+const canSubmit = enabled && Boolean(turnstileSiteKey);
 ---
 
 <Layout title="Newsletter" currentPage="/newsletter">
-  <div class="max-w-lg mx-auto px-6 py-12 md:py-16">
-    <!-- Page header -->
-    <div class="flex items-center gap-2 mb-3">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="text-muted-foreground"
-        aria-hidden="true"
-      >
-        <rect width="20" height="16" x="2" y="4" rx="2" />
-        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-      </svg>
-      <span
-        class="text-xs text-muted-foreground font-medium uppercase tracking-wider"
-        >Newsletter</span
-      >
-    </div>
+  <div class="mx-auto w-full max-w-lg px-6 py-12 md:py-16">
+    <header class="mb-8 text-center">
+      <div class="mb-3 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+        Newsletter
+      </div>
+      <h1 class="text-2xl font-bold tracking-tight text-foreground">Stay in the loop</h1>
+      <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{siteConfig.newsletter.description ?? "Occasional notes on engineering, projects, and ideas."}</p>
+    </header>
 
-    <!-- Subscribe card -->
-    <div class="card">
+    {!enabled && (
+      <div class="mb-4 rounded-md border border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive" role="status">
+        <strong class="font-semibold">Production signup is disabled.</strong> Enable the newsletter integration before subscribers can be collected.
+      </div>
+    )}
+    {enabled && !turnstileSiteKey && (
+      <div class="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" role="status">
+        <strong class="font-semibold text-foreground">Signup is not configured.</strong> Add the Turnstile site key before collecting subscribers.
+      </div>
+    )}
+
+    <section aria-labelledby="signup-heading" class="card">
       <header>
-        <h1>Stay in the loop</h1>
-        <p>
-          {siteConfig.newsletter.description ?? "Occasional notes on engineering, projects, and ideas. No spam."}
-        </p>
+        <h2 id="signup-heading">Subscribe for new notes</h2>
+        <p>Get new writing and project updates in your inbox when there is something useful to share.</p>
       </header>
       <section>
-        <!-- Subscriber count pill -->
-        <div class="flex items-center gap-2 mb-5">
-          <div class="flex -space-x-2">
-            <img
-              class="size-6 rounded-full ring-2 ring-background object-cover"
-              src="https://picsum.photos/seed/sub1/40/40"
-              alt=""
-              aria-hidden="true"
-            >
-            <img
-              class="size-6 rounded-full ring-2 ring-background object-cover"
-              src="https://picsum.photos/seed/sub2/40/40"
-              alt=""
-              aria-hidden="true"
-            >
-            <img
-              class="size-6 rounded-full ring-2 ring-background object-cover"
-              src="https://picsum.photos/seed/sub3/40/40"
-              alt=""
-              aria-hidden="true"
-            >
-          </div>
-          <p class="text-xs text-muted-foreground">Join 240+ readers</p>
-        </div>
-
-        <!-- Form -->
-        <form
-          id="newsletter-form"
-          class="grid gap-4"
-          novalidate
-          data-form-url={siteConfig.newsletter.formUrl ?? ""}
-        >
+        <form id="newsletter-form" class="grid gap-4" novalidate>
           <div class="grid gap-2">
-            <label for="newsletter-name" class="label">Name</label>
-            <input
-              id="newsletter-name"
-              class="input"
-              type="text"
-              placeholder="Your name"
-              autocomplete="given-name"
-            >
+            <label for="newsletter-name" class="label">Name <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <input id="newsletter-name" name="name" class="input disabled:cursor-not-allowed disabled:opacity-60" type="text" autocomplete="given-name" placeholder="Your name" disabled={!canSubmit} />
           </div>
           <div class="grid gap-2">
-            <label for="newsletter-email" class="label">
-              Email <span class="text-destructive" aria-hidden="true">*</span>
-            </label>
-            <input
-              id="newsletter-email"
-              class="input"
-              type="email"
-              placeholder="you@example.com"
-              autocomplete="email"
-              required
-            >
+            <label for="newsletter-email" class="label">Email address <span class="text-destructive" aria-hidden="true">*</span></label>
+            <input id="newsletter-email" name="email" class="input disabled:cursor-not-allowed disabled:opacity-60" type="email" autocomplete="email" placeholder="you@example.com" required disabled={!canSubmit} aria-describedby="newsletter-email-help newsletter-error" />
+            <p id="newsletter-email-help" class="text-xs text-muted-foreground">You can unsubscribe from any email.</p>
           </div>
-          <button type="submit" class="btn w-full">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M22 2L11 13" />
-              <path d="M22 2L15 22l-4-9-9-4 20-7z" />
-            </svg>
-            Subscribe
+          {enabled && turnstileSiteKey && <div id="newsletter-turnstile" class="min-h-[65px]" data-sitekey={turnstileSiteKey}></div>}
+          <p id="newsletter-error" class="text-sm text-destructive" role="alert" hidden></p>
+          <button type="submit" class="btn w-full" id="newsletter-submit" disabled={!canSubmit}>
+            <span class="newsletter-submit-label">Subscribe</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg>
           </button>
-          <p class="text-xs text-muted-foreground text-center">
-            No spam, ever. Unsubscribe at any time.
-          </p>
+          <p class="text-center text-xs leading-relaxed text-muted-foreground">By subscribing, you consent to receive this newsletter. Your email is used only for newsletter communications and can be removed at any time.</p>
         </form>
-
-        <!-- Success state -->
-        <div id="newsletter-success" class="text-center py-4" hidden>
-          <div
-            class="inline-flex size-12 items-center justify-center rounded-full bg-secondary mb-4"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-secondary-foreground"
-              aria-hidden="true"
-            >
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-          </div>
-          <h3 class="font-semibold text-foreground mb-1">You're in</h3>
-          <p class="text-sm text-muted-foreground">
-            Thanks for subscribing. Check your inbox for a confirmation.
-          </p>
+        <div id="newsletter-success" class="py-4 text-center" role="status" tabindex="-1" hidden>
+          <div class="mx-auto mb-3 inline-flex size-9 items-center justify-center rounded-full bg-secondary" aria-hidden="true">✓</div>
+          <h2 class="mb-1 font-semibold">Check your inbox</h2>
+          <p class="text-sm text-muted-foreground">If this address can be subscribed, you will receive a confirmation email shortly. Use the link there to finish subscribing.</p>
         </div>
       </section>
-    </div>
+    </section>
 
-    <!-- What to expect section -->
-    <div class="card mt-6">
+    <section aria-labelledby="expect-heading" class="card mt-4">
       <header>
-        <h2>What to expect</h2>
+        <h2 id="expect-heading">What to expect</h2>
       </header>
       <section>
-        <ul class="space-y-3">
-          <li class="flex items-start gap-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-muted-foreground shrink-0 mt-0.5"
-              aria-hidden="true"
-            >
-              <path
-                d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
-              />
-              <circle cx="12" cy="13" r="3" />
-            </svg>
-            <div>
-              <p class="text-sm font-medium text-foreground">Behind the lens</p>
-              <p class="text-xs text-muted-foreground mt-0.5">
-                Notes on technique, gear decisions, and the thinking behind a
-                shot.
-              </p>
-            </div>
+        <ul class="grid gap-4">
+          <li class="flex gap-3">
+            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg></span>
+            <div><h3 class="text-sm font-medium text-foreground">Engineering notes</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">Practical notes on building, debugging, and maintaining software.</p></div>
           </li>
-          <li class="flex items-start gap-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-muted-foreground shrink-0 mt-0.5"
-              aria-hidden="true"
-            >
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
-            </svg>
-            <div>
-              <p class="text-sm font-medium text-foreground">
-                What I'm building
-              </p>
-              <p class="text-xs text-muted-foreground mt-0.5">
-                Updates on open-source work, side projects, and things I find
-                interesting.
-              </p>
-            </div>
+          <li class="flex gap-3">
+            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path></svg></span>
+            <div><h3 class="text-sm font-medium text-foreground">Project updates</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">Short updates on open-source work, experiments, and useful tools.</p></div>
           </li>
-          <li class="flex items-start gap-3">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-muted-foreground shrink-0 mt-0.5"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <div>
-              <p class="text-sm font-medium text-foreground">Cadence</p>
-              <p class="text-xs text-muted-foreground mt-0.5">
-                Roughly twice a month. Never more than that.
-              </p>
-            </div>
+          <li class="flex gap-3">
+            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+            <div><h3 class="text-sm font-medium text-foreground">A focused pace</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">Occasional delivery, only when there is something worth sending.</p></div>
           </li>
         </ul>
       </section>
-    </div>
+    </section>
   </div>
 </Layout>
 
-<script>
-  const form = document.getElementById(
-    "newsletter-form"
-  ) as HTMLFormElement | null;
-  const success = document.getElementById("newsletter-success");
-  const emailInput = document.getElementById(
-    "newsletter-email"
-  ) as HTMLInputElement | null;
-  const nameInput = document.getElementById(
-    "newsletter-name"
-  ) as HTMLInputElement | null;
-  const submitBtn = form?.querySelector(
-    'button[type="submit"]'
-  ) as HTMLButtonElement | null;
+{enabled && turnstileSiteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>}
 
-  form?.addEventListener("submit", async (e) => {
-    e.preventDefault();
+{enabled && turnstileSiteKey && <script>
+  type NewsletterResponse = { success: boolean; error?: string };
+  type Turnstile = { render: (container: HTMLElement, options: { sitekey: string; action: string }) => string | number; getResponse: (widgetId: string | number) => string; reset: (widgetId: string | number) => void };
+  const isNewsletterResponse = (value: unknown): value is NewsletterResponse => typeof value === "object" && value !== null && "success" in value && typeof value.success === "boolean" && (!("error" in value) || typeof value.error === "string");
+  const getTurnstile = () => (window as Window & { turnstile?: Turnstile }).turnstile;
+  let turnstileWidgetId: string | number | null = null;
+  let turnstileContainerForWidget: HTMLElement | null = null;
 
-    if (!(emailInput?.value && emailInput.checkValidity())) {
-      emailInput?.setAttribute("aria-invalid", "true");
-      emailInput?.focus();
+  const initTurnstile = (turnstileContainer: HTMLElement) => {
+    if (turnstileContainerForWidget !== turnstileContainer) {
+      turnstileContainerForWidget = turnstileContainer;
+      turnstileWidgetId = null;
+    }
+    const renderTurnstile = () => {
+      const turnstile = getTurnstile();
+      if (turnstile && turnstileWidgetId === null && turnstileContainer.isConnected) {
+        turnstileWidgetId = turnstile.render(turnstileContainer, { sitekey: turnstileContainer.dataset.sitekey ?? "", action: "newsletter_subscribe" });
+      }
+    };
+    if (getTurnstile()) {
+      renderTurnstile();
       return;
     }
-
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Subscribing…";
+    if (turnstileContainer.dataset.turnstileLoadListener !== "true") {
+      const script = document.querySelector('script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]');
+      if (script) {
+        turnstileContainer.dataset.turnstileLoadListener = "true";
+        script.addEventListener("load", renderTurnstile, { once: true });
+      }
     }
+  };
 
+  const init = () => {
+    const form = document.querySelector("#newsletter-form") as HTMLFormElement | null;
+    const email = document.querySelector("#newsletter-email") as HTMLInputElement | null;
+    const name = document.querySelector("#newsletter-name") as HTMLInputElement | null;
+    const submit = document.querySelector("#newsletter-submit") as HTMLButtonElement | null;
+    const error = document.querySelector("#newsletter-error") as HTMLElement | null;
+    const success = document.querySelector("#newsletter-success") as HTMLElement | null;
+    const turnstileContainer = document.querySelector("#newsletter-turnstile") as HTMLElement | null;
+    if (!form || !email || !submit || !error || !success || !turnstileContainer) return;
+    initTurnstile(turnstileContainer);
+    if (form.dataset.initialized === "true") return;
+    form.dataset.initialized = "true";
+    const showError = (message: string) => { error.textContent = message; error.hidden = false; };
+    const setSubmitLabel = (label: string) => submit.querySelector(".newsletter-submit-label")?.replaceChildren(label);
+    form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!email.checkValidity()) {
+      email?.setAttribute("aria-invalid", "true");
+      email?.focus();
+      return;
+    }
+    error.hidden = true;
+    if (!email.checkValidity()) {
+      email.setAttribute("aria-invalid", "true");
+      email.focus();
+      return;
+    }
+    submit.disabled = true;
+    setSubmitLabel("Subscribing…");
+    const currentTurnstile = getTurnstile();
+    const turnstileToken = currentTurnstile && turnstileWidgetId !== null ? currentTurnstile.getResponse(turnstileWidgetId) : undefined;
     try {
-      const body = new URLSearchParams({ email: emailInput.value });
-      if (nameInput?.value) {
-        body.set("name", nameInput.value);
-      }
-
-      const formUrl =
-        document.getElementById("newsletter-form")?.dataset.formUrl ?? "";
-      const res = await fetch(formUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      });
-
-      if (!res.ok) {
-        throw new Error("Request failed");
-      }
-
-      form.setAttribute("hidden", "");
-      success?.removeAttribute("hidden");
-    } catch {
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Subscribe";
-      }
-      // Surface a basic error without a full error UI
-      emailInput?.setAttribute("aria-invalid", "true");
+      const response = await fetch("/api/newsletter/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.value.trim(), name: name?.value.trim() || undefined, turnstileToken: turnstileToken || undefined }) });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok || !isNewsletterResponse(body) || !body.success) throw new Error("Unable to subscribe. Please try again.");
+      form.hidden = true;
+      success.hidden = false;
+      success.focus();
+    } catch (requestError) {
+      showError(requestError instanceof Error ? requestError.message : "Unable to subscribe. Please try again.");
+      submit.disabled = false;
+      setSubmitLabel("Subscribe");
+    } finally {
+      if (currentTurnstile && turnstileWidgetId !== null) currentTurnstile.reset(turnstileWidgetId);
     }
-  });
+    });
+    email.addEventListener("input", () => { email.removeAttribute("aria-invalid"); error.hidden = true; });
+  };
+  document.addEventListener("astro:page-load", init);
+  init();
+</script>}
 
-  emailInput?.addEventListener("input", () => {
-    emailInput.removeAttribute("aria-invalid");
-  });
-</script>
+<style>
+  @media (prefers-reduced-motion: no-preference) {
+    #newsletter-submit { transition: transform 150ms ease, opacity 150ms ease; }
+    #newsletter-submit:active { transform: scale(0.96); }
+  }
+</style>

@@ -1,0 +1,34 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { siteConfig } from "../../site.config";
+const enabled = siteConfig.newsletter.enabled;
+if (!enabled) Astro.response.status = 404;
+---
+
+<Layout title={enabled ? "Unsubscribe" : "Page not found"} currentPage="/newsletter">
+  {enabled ? <div class="mx-auto max-w-lg px-6 py-12 md:py-16"><div class="card"><header><h1>Unsubscribe from the newsletter</h1><p>Confirm below to stop future newsletter emails for this address.</p></header><section class="grid gap-4"><button id="newsletter-unsubscribe" class="btn w-full" type="button" disabled>Unsubscribe</button><p id="newsletter-result" role="status" aria-live="polite" class="text-sm text-muted-foreground"></p><a id="newsletter-back" class="text-center text-sm underline underline-offset-4" href="/" hidden>Return home</a></section></div></div> : <div class="mx-auto max-w-lg px-6 py-20 text-center"><h1>Page not found</h1><p class="mt-2 text-muted-foreground">The newsletter is not available.</p><a class="btn mt-6 inline-flex" href="/">Return home</a></div>}
+</Layout>
+
+{enabled && <script>
+  type NewsletterResponse = { success: boolean; error?: string };
+  const isNewsletterResponse = (value: unknown): value is NewsletterResponse => typeof value === "object" && value !== null && "success" in value && typeof value.success === "boolean" && (!("error" in value) || typeof value.error === "string");
+  const init = () => {
+    const button = document.querySelector("#newsletter-unsubscribe") as HTMLButtonElement | null;
+    const result = document.querySelector("#newsletter-result") as HTMLElement | null;
+    const back = document.querySelector("#newsletter-back") as HTMLAnchorElement | null;
+    if (!button || button.dataset.initialized === "true" || !result || !back) return;
+    button.dataset.initialized = "true";
+    const token = new URLSearchParams(location.hash.slice(1)).get("token");
+    if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
+    if (token) button.disabled = false;
+    else result.textContent = "This unsubscribe link is missing or incomplete. Use the link from a newsletter email.";
+    button.addEventListener("click", async () => {
+      if (!token) return;
+      button.disabled = true; button.textContent = "Unsubscribing…";
+      try { const response = await fetch("/api/newsletter/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }); const body: unknown = await response.json().catch(() => null); if (!response.ok || !isNewsletterResponse(body) || !body.success) throw new Error(isNewsletterResponse(body) && body.error ? body.error : "Unable to unsubscribe. Please try again."); result.textContent = "You have been unsubscribed."; back.hidden = false; }
+      catch (error) { result.textContent = error instanceof Error ? error.message : "Unable to unsubscribe. Please try again."; button.disabled = false; button.textContent = "Unsubscribe"; }
+    });
+  };
+  document.addEventListener("astro:page-load", init);
+  init();
+</script>}

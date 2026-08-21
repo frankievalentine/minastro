@@ -1,10 +1,10 @@
-# EmDash environment variables (local dev only — set real values via `bunx wrangler secret put`)
-# Only the variables listed below are recognized by EmDash.
-# See https://docs.emdashcms.com/reference/configuration/#environment-variables
+# Local secret values only. This file does not create Worker bindings; configure
+# D1, Email Sending, and Rate Limiting in wrangler.jsonc before testing the
+# newsletter with Wrangler.
 
-EMDASH_SITE_URL=http://localhost:4321
-EMDASH_ALLOWED_ORIGINS=
-EMDASH_ENCRYPTION_KEY=change-me-to-a-random-64-char-string
-EMDASH_PREVIEW_SECRET=
-EMDASH_IP_SALT=
-EMDASH_AUTH_SECRET=
+# Optional local EmDash secret. Generate one with `bunx emdash secrets generate`.
+EMDASH_ENCRYPTION_KEY=
+
+# Newsletter (Turnstile) — set via `bunx wrangler secret put TURNSTILE_SECRET_KEY` in production
+# Get your secret key from https://dash.cloudflare.com/?to=/:account/turnstile
+TURNSTILE_SECRET_KEY=
