@@ -2,9 +2,29 @@
 
 An EmDash-first personal-site template built with Astro and Cloudflare Workers.
 
-## Create a site
+## Getting Started
+
+### Agent-guided setup
+
+Open a coding agent in this clone and paste the following prompt:
+
+```text
+Set up a new Minastro deployment from this clone. Read README.md and AGENTS.md
+first. Run bun install, bun run check, bun run seed:validate, bun run build,
+and bunx wrangler whoami; report any failures and confirm the authenticated
+Cloudflare account. Do not create Cloudflare resources or deploy until I
+approve. After approval, run bun run cloudflare:setup, use a unique Worker
+name, and skip the optional newsletter unless I explicitly provide its Email
+Sending, Turnstile, and Rate Limiting prerequisites. Do not expose or commit
+secrets. Once deployed, report the deployment URL, guide me through
+/_emdash/admin/setup, and smoke-test the public site and CMS routes.
+```
+
+### Manual setup
 
 ```bash
+git clone https://github.com/frankievalentine/minastro.git
+cd minastro
 bun install
 bun run cloudflare:setup
 ```
@@ -12,6 +32,11 @@ bun run cloudflare:setup
 The interactive setup authenticates Wrangler; provisions the required D1, R2,
 and session KV resources; writes their bindings to `wrangler.jsonc`; stores
 `EMDASH_ENCRYPTION_KEY`; then builds and deploys the Worker.
+
+Setup changes `wrangler.jsonc` with the provisioned resource IDs and Worker
+name. Worker secrets are stored in Cloudflare and are never written to the
+repository. Use a separate clone when testing an installation without changing
+an existing checkout.
 
 Open the deployed URL and complete the one-time EmDash setup at
 `/_emdash/admin/setup`. Register the production passkey at the final origin:
