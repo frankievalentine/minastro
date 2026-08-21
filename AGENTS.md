@@ -9,7 +9,7 @@ bun run build            # Build production SSR output
 bun run check            # Type-check and lint
 bun run seed:validate    # Validate the EmDash bootstrap seed
 bun run types:generate   # Generate .emdash/types.ts and .emdash/schema.json from a running EmDash URL
-bun run cloudflare:setup # Provision D1/R2, configure bindings, and deploy once
+bun run cloudflare:setup # Provision D1/R2 and deploy the configured Worker once
 bun run cf:deploy        # Deploy an already configured Worker
 ```
 
@@ -28,12 +28,25 @@ For a new deployment, run `bunx wrangler whoami` first. Authenticate with
 Cloudflare account with permission to create Workers, D1 databases, R2 buckets,
 KV namespaces, and Worker secrets.
 
-Run `bun run cloudflare:setup` only from the deployment clone. It is interactive
-and creates the Worker, D1 database, R2 bucket, session KV namespace, and the
+Before provisioning, ask the user for their final canonical hostname. Confirm
+with them that the hostname lives in an active Cloudflare zone owned by that
+authenticated account, and obtain explicit approval before creating resources,
+attaching the domain, or deploying. After approval, set `src/site.config.ts`
+to `https://<hostname>` and add `{ "pattern": "<hostname>",
+"custom_domain": true }` to a top-level `routes` array in `wrangler.jsonc`.
+Cloudflare handles DNS and TLS for the attached hostname only under those
+conditions; registrar transfers and DNS hosted outside Cloudflare cannot be
+automated by this repository, so never assume an arbitrary external hostname
+can be attached.
+
+Run `bun run cloudflare:setup` only from the deployment clone and an interactive
+terminal so Wrangler can show any custom-domain or DNS conflict prompt. It
+creates the Worker, D1 database, R2 bucket, session KV namespace, and the
 `EMDASH_ENCRYPTION_KEY` secret; it then writes the Worker name and binding IDs
-to `wrangler.jsonc` and deploys. Do not deploy while the placeholder IDs remain,
-and do not manually replace only some placeholders: the setup script rejects
-partially configured core bindings to prevent duplicate resources.
+to `wrangler.jsonc` and deploys the route/site URL configured above. Do not
+deploy while the placeholder IDs remain, and do not manually replace only some
+placeholders: the setup script rejects partially configured core bindings to
+prevent duplicate resources.
 
 Wrangler 4.120 does not accept a `--json` flag on `wrangler d1 create`.
 Do not add that flag to D1 provisioning commands; use the currently supported
@@ -43,12 +56,18 @@ Secrets are stored in Cloudflare, never committed. `.dev.vars` is ignored and
 is only for local development; it cannot create Cloudflare bindings. The
 newsletter setup is optional and needs a verified Email Sending domain,
 Turnstile keys, and a Rate Limiting namespace. Skip it unless those values are
-available and the deployment explicitly includes newsletter signup.
+available and the deployment explicitly includes newsletter signup. Manual
+responsibilities remain with the user: authentication and account choice,
+resource approval, external domain/zone ownership, passkey registration, and
+any optional newsletter or third-party credentials.
 
 After initial provisioning, use `bun run cf:dev` for Worker-compatible local
-testing and `bun run cf:deploy` for later deployments. Complete the EmDash
-setup wizard at `/_emdash/admin/setup` on the final deployment origin; connect
-a custom domain before registering its production passkey.
+testing and `bun run cf:deploy` for later deployments. Verify the final HTTPS
+origin responds at the canonical hostname, then complete the EmDash setup
+wizard at `/_emdash/admin/setup` on that final origin only; register its
+production passkey there. `*.workers.dev` URLs are for temporary testing only:
+they are a different WebAuthn origin from the custom domain and must not
+receive the production passkey.
 
 ## Architecture
 

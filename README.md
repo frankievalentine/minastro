@@ -29,13 +29,28 @@ first. If an emdash-docs MCP server is available in your client, use it for
 current EmDash questions; do not guess EmDash behavior from memory. Run bun
 install, bun run check, bun run seed:validate, bun run build,
 and bunx wrangler whoami; report any failures and confirm the authenticated
-Cloudflare account. Do not create Cloudflare resources or deploy until I
-approve. After approval, run bun run cloudflare:setup, use a unique Worker
-name, and skip the optional newsletter unless I explicitly provide its Email
-Sending, Turnstile, and Rate Limiting prerequisites. Do not expose or commit
-secrets. Once deployed, report the deployment URL, guide me through
-/_emdash/admin/setup, and smoke-test the public site and CMS routes.
+Cloudflare account. Before provisioning anything, ask me for my final
+canonical production hostname and confirm with me that it lives in an active
+Cloudflare zone owned by that account; never plan to serve production from a
+workers.dev address. Do not create Cloudflare resources, attach domains, or
+deploy until I approve. After approval, set src/site.config.ts to
+https://<hostname> and add { "pattern": "<hostname>", "custom_domain": true }
+to a top-level routes array in wrangler.jsonc. Then run bun run
+cloudflare:setup from an interactive terminal, use a unique Worker name, and
+review any Wrangler conflict prompt rather than bypassing it. Skip the optional
+newsletter unless I explicitly provide its Email Sending, Turnstile, and Rate
+Limiting prerequisites. Do not expose or commit secrets. Once deployed, verify
+the final HTTPS origin responds, then guide me through /_emdash/admin/setup at
+that origin only and smoke-test the public site and CMS routes. Never register
+the production passkey on a workers.dev origin.
 ```
+
+Setup cannot automate everything. You remain responsible for authenticating
+Wrangler and choosing the Cloudflare account, approving resource creation,
+owning the domain's zone in that account, registering the production passkey,
+and supplying any optional newsletter or third-party credentials. Registrar
+transfers and DNS hosted outside Cloudflare are outside what this repository
+automates.
 
 ### Manual setup
 
@@ -46,19 +61,35 @@ bun install
 bun run cloudflare:setup
 ```
 
-The interactive setup authenticates Wrangler; provisions the required D1, R2,
-and session KV resources; writes their bindings to `wrangler.jsonc`; stores
-`EMDASH_ENCRYPTION_KEY`; then builds and deploys the Worker.
+Before setup, choose the production hostname you intend to keep. With explicit
+approval, set `src/site.config.ts` to its HTTPS URL and add the hostname as a
+Worker custom-domain route in `wrangler.jsonc`:
+
+```jsonc
+"routes": [{ "pattern": "example.com", "custom_domain": true }]
+```
+
+The interactive setup provisions the required D1, R2, and session KV resources;
+writes their bindings to `wrangler.jsonc`; stores `EMDASH_ENCRYPTION_KEY`; and
+deploys the configured Worker. Run it from a terminal so Wrangler can show any
+custom-domain or DNS conflict prompt.
+
+Cloudflare handles DNS and TLS for the attached hostname only when it lives in
+an active zone owned by the authenticated account. Confirm that pairing before
+provisioning; owning a domain registered elsewhere does not let this script
+transfer the registrar or manage arbitrary external DNS.
 
 Setup changes `wrangler.jsonc` with the provisioned resource IDs and Worker
-name. Worker secrets are stored in Cloudflare and are never written to the
-repository. Use a separate clone when testing an installation without changing
-an existing checkout.
+name. The agent/operator applies the approved canonical route and site URL
+before setup. Worker secrets are stored in Cloudflare and are never written to
+the repository. Use a separate clone when testing an installation without
+changing an existing checkout.
 
-Open the deployed URL and complete the one-time EmDash setup at
-`/_emdash/admin/setup`. Register the production passkey at the final origin:
-`*.workers.dev` and a custom domain are different WebAuthn origins. Connect a
-custom domain before completing production setup, or bootstrap it separately.
+Verify the final HTTPS origin responds at your canonical hostname, then open
+it and complete the one-time EmDash setup at `/_emdash/admin/setup`. Register
+the production passkey at that final origin: `*.workers.dev` and a custom
+domain are different WebAuthn origins. Use `*.workers.dev` only for temporary
+testing; it should never receive the production passkey.
 
 For Worker-compatible local development **after bindings are configured**:
 
