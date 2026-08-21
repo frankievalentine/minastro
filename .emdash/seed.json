@@ -97,9 +97,98 @@
           "content": [
             {
               "_type": "block",
+              "_key": "welcome-intro",
               "style": "normal",
               "children": [
-                { "_type": "span", "text": "This template starts with EmDash as its only content source. Open the admin to replace this post with your own writing. Powered by EmDash." }
+                { "_type": "span", "_key": "welcome-intro-1", "text": "This template starts with EmDash as its only content source. Everything you read here is stored in your D1 database and rendered by Astro on Cloudflare Workers. Open the admin at " },
+                { "_type": "span", "_key": "welcome-intro-2", "text": "/_emdash/admin", "marks": ["code"] },
+                { "_type": "span", "_key": "welcome-intro-3", "text": " to edit this post, then make it your own." }
+              ],
+              "markDefs": []
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-h2",
+              "style": "h2",
+              "children": [
+                { "_type": "span", "_key": "welcome-h2-1", "text": "What you can write" }
+              ]
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-marks-p",
+              "style": "normal",
+              "children": [
+                { "_type": "span", "_key": "welcome-marks-1", "text": "The editor supports the formatting you expect: " },
+                { "_type": "span", "_key": "welcome-marks-2", "text": "bold text", "marks": ["strong"] },
+                { "_type": "span", "_key": "welcome-marks-3", "text": ", " },
+                { "_type": "span", "_key": "welcome-marks-4", "text": "italic emphasis", "marks": ["em"] },
+                { "_type": "span", "_key": "welcome-marks-5", "text": ", " },
+                { "_type": "span", "_key": "welcome-marks-6", "text": "underline", "marks": ["underline"] },
+                { "_type": "span", "_key": "welcome-marks-7", "text": ", and even " },
+                { "_type": "span", "_key": "welcome-marks-8", "text": "struck-through revisions", "marks": ["strike-through"] },
+                { "_type": "span", "_key": "welcome-marks-9", "text": ". You can also link to " },
+                { "_type": "span", "_key": "welcome-marks-10", "text": "the Astro documentation", "marks": ["welcome-link-astro"] },
+                { "_type": "span", "_key": "welcome-marks-11", "text": " when you need a reference while writing." }
+              ],
+              "markDefs": [
+                {
+                  "_type": "link",
+                  "_key": "welcome-link-astro",
+                  "href": "https://docs.astro.build",
+                  "blank": true
+                }
+              ]
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-list-bullet",
+              "style": "normal",
+              "listItem": "bullet",
+              "level": 1,
+              "children": [
+                { "_type": "span", "_key": "welcome-list-bullet-1", "text": "Posts and projects live in CMS collections you can reshape in the admin." }
+              ]
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-list-number",
+              "style": "normal",
+              "listItem": "number",
+              "level": 1,
+              "children": [
+                { "_type": "span", "_key": "welcome-list-number-1", "text": "Sign in, open this post, replace the copy, and publish your first update." }
+              ]
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-quote",
+              "style": "blockquote",
+              "children": [
+                { "_type": "span", "_key": "welcome-quote-1", "text": "Publish before it feels finished. A small site that ships beats a perfect one that never launches." }
+              ]
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-code-p",
+              "style": "normal",
+              "children": [
+                { "_type": "span", "_key": "welcome-code-p-1", "text": "This starter code block includes a language and filename, so Minastro renders it with syntax highlighting:" }
+              ]
+            },
+            {
+              "_type": "code",
+              "_key": "welcome-code",
+              "code": "export function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet(\"EmDash\"));",
+              "language": "typescript",
+              "filename": "example.ts"
+            },
+            {
+              "_type": "block",
+              "_key": "welcome-outro",
+              "style": "normal",
+              "children": [
+                { "_type": "span", "_key": "welcome-outro-1", "text": "When you are done exploring, delete this post and start writing. Your database, media, and deployment are already wired up." }
               ]
             }
           ]

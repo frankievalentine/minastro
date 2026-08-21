@@ -1,4 +1,4 @@
-import { getEmDashCollection } from "emdash";
+import { getEmDashCollection, getSiteSettings } from "emdash";
 import rss from "@astrojs/rss";
 import type { APIContext } from "astro";
 import { siteConfig } from "../site.config";
@@ -10,6 +10,17 @@ export async function GET(context: APIContext) {
     pubDate: Date;
     link: string;
   }
+
+  // Settings failures must surface, not fall back silently.
+  const settings = await getSiteSettings();
+  const rssTitle =
+    typeof settings?.title === "string" && settings.title.trim()
+      ? settings.title
+      : siteConfig.title;
+  const rssDescription =
+    typeof settings?.tagline === "string" && settings.tagline.trim()
+      ? settings.tagline
+      : siteConfig.description;
 
   const { entries: posts, error } = await getEmDashCollection("posts", {
     status: "published",
@@ -40,8 +51,8 @@ export async function GET(context: APIContext) {
     });
 
   return rss({
-    title: siteConfig.title,
-    description: siteConfig.description,
+    title: rssTitle,
+    description: rssDescription,
     site: context.site!,
     items,
     customData: "<language>en-us</language>",

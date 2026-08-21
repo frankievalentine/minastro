@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { getEmDashEntry, extractPlainText } from "emdash";
+import { getEmDashEntry, getSiteSettings, extractPlainText } from "emdash";
 import { PortableText } from "emdash/ui";
 import BackToTop from "../../components/ui/BackToTop.astro";
 import CodeBlock from "../../components/CodeBlock.astro";
@@ -50,6 +50,11 @@ if (entry.data.status !== "published" && !isPreview) {
   return new Response(null, { status: 404 });
 }
 
+const cmsSettings = await getSiteSettings();
+const dateFormat =
+  typeof cmsSettings.dateFormat === "string" ? cmsSettings.dateFormat : undefined;
+const timezone =
+  typeof cmsSettings.timezone === "string" ? cmsSettings.timezone : undefined;
 const portableTextContent = entry.data.content;
 const contentRaw = extractPlainText(portableTextContent);
 const postData: PostData = {
@@ -114,7 +119,7 @@ const timeToRead = readingTime(contentRaw);
               datetime={postData.publishedAt.toISOString()}
               class="text-sm text-muted-foreground"
             >
-              {formatDate(postData.publishedAt)}
+              {formatDate(postData.publishedAt, dateFormat, timezone)}
             </time>
             <span class="text-border" aria-hidden="true">·</span>
           </>

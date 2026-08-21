@@ -45,18 +45,12 @@ const cmsNav = (primaryMenu?.items ?? [])
     href: item.url,
     target: typeof item.target === "string" ? item.target : undefined,
   }));
-const configuredNav =
-  cmsNav.length > 0
-    ? cmsNav
-    : siteConfig.nav.map((item) => ({ ...item, target: undefined }));
-const primaryNav = configuredNav.some(
-  (item) => item.href.replace(/\/$/, "") === "/newsletter",
-)
-  ? configuredNav
-  : [
-      ...configuredNav,
-      { label: "Newsletter", href: "/newsletter", target: undefined },
-    ];
+// A resolved primary menu is authoritative, even when intentionally empty.
+// Local navigation is only a fallback for a missing menu.
+const primaryNav =
+  primaryMenu == null
+    ? siteConfig.nav.map((item) => ({ ...item, target: undefined }))
+    : cmsNav;
 
 const {
   title: pageTitle,
