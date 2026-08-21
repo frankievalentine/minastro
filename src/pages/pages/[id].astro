@@ -3,20 +3,22 @@ export const prerender = false;
 
 import { getEmDashEntry } from "emdash";
 import type { PortableTextBlock } from "emdash";
-import CmsPageView from "../components/CmsPageView.astro";
+import CmsPageView from "../../components/CmsPageView.astro";
 
-const slug = Astro.params.slug;
-if (!slug) {
+// Preview-only route for the EmDash admin preview URL (`/pages/<id>?_preview=...`).
+// Public Pages are always served by `src/pages/[slug].astro`.
+const id = Astro.params.id;
+if (!id) {
   return new Response(null, { status: 404 });
 }
 
-const { entry, error, isPreview } = await getEmDashEntry("pages", slug);
+const { entry, error, isPreview } = await getEmDashEntry("pages", id);
 
 if (error) {
-  throw error;
+  return new Response(null, { status: 500 });
 }
 
-if (!entry) {
+if (!entry || !isPreview) {
   return new Response(null, { status: 404 });
 }
 
@@ -24,19 +26,14 @@ const page = entry.data as {
   content?: unknown;
   description?: unknown;
   slug?: unknown;
-  status?: unknown;
   title?: unknown;
 };
-
-if (page.status !== "published" && !isPreview) {
-  return new Response(null, { status: 404 });
-}
 
 if (typeof page.title !== "string" || typeof page.description !== "string") {
   throw new Error("The CMS page is missing its required title or description.");
 }
 
-const pageSlug = typeof page.slug === "string" ? page.slug : slug;
+const pageSlug = typeof page.slug === "string" ? page.slug : id;
 const content = Array.isArray(page.content)
   ? (page.content as PortableTextBlock[])
   : [];
