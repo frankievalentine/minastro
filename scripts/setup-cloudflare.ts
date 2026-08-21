@@ -174,15 +174,57 @@ function updateNewsletterSiteConfig(
   return `${source.slice(0, start)}${block}${source.slice(end)}`;
 }
 
-function parseResourceId(output: string, resource: string) {
-  const parsed = JSON.parse(output) as Record<string, unknown>;
-  const id = [parsed.uuid, parsed.database_id, parsed.namespace_id, parsed.id].find(
+type D1ListEntry = { name?: unknown; uuid?: unknown; database_id?: unknown };
+type KvNamespaceEntry = { title?: unknown; id?: unknown };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function resolveD1DatabaseId(databaseName: string, resource: string) {
+  const listOutput = await run(["bunx", "wrangler", "d1", "list", "--json"], { quiet: true });
+  let databases: unknown;
+  try {
+    databases = JSON.parse(listOutput);
+  } catch {
+    throw new Error(`Could not parse \`wrangler d1 list --json\` output while looking up ${resource}.`);
+  }
+  if (!Array.isArray(databases)) {
+    throw new Error(`Unexpected \`wrangler d1 list --json\` output while looking up ${resource}.`);
+  }
+  const match = databases.find(
+    (entry): entry is D1ListEntry => isRecord(entry) && entry.name === databaseName,
+  );
+  if (!match) {
+    throw new Error(`Wrangler created ${resource}, but "${databaseName}" was not found in \`wrangler d1 list\`. Verify it in the Cloudflare dashboard before rerunning setup.`);
+  }
+  const id = [match.uuid, match.database_id].find(
     (value): value is string => typeof value === "string" && value.length > 0,
   );
   if (!id) {
-    throw new Error(`Wrangler created ${resource} but did not return its ID. Configure it manually before rerunning setup.`);
+    throw new Error(`Wrangler created ${resource}, but its listing has no ID. Configure it manually before rerunning setup.`);
   }
   return id;
+}
+
+async function resolveKvNamespaceId(namespaceTitle: string, resource: string) {
+  const listOutput = await run(["bunx", "wrangler", "kv", "namespace", "list"], { quiet: true });
+  let namespaces: unknown;
+  try {
+    namespaces = JSON.parse(listOutput);
+  } catch {
+    throw new Error(`Could not parse \`wrangler kv namespace list\` output while looking up ${resource}.`);
+  }
+  if (!Array.isArray(namespaces)) {
+    throw new Error(`Unexpected \`wrangler kv namespace list\` output while looking up ${resource}.`);
+  }
+  const match = namespaces.find(
+    (entry): entry is KvNamespaceEntry => isRecord(entry) && entry.title === namespaceTitle,
+  );
+  if (!match || typeof match.id !== "string" || match.id.length === 0) {
+    throw new Error(`Wrangler created ${resource}, but "${namespaceTitle}" with an ID was not found in \`wrangler kv namespace list\`. Verify it in the Cloudflare dashboard before rerunning setup.`);
+  }
+  return match.id;
 }
 
 const readline = createInterface({ input, output });
@@ -225,8 +267,8 @@ try {
       process.exit(0);
     }
 
-    const databaseOutput = await run(["bunx", "wrangler", "d1", "create", databaseName, "--json"], { quiet: true });
-    const databaseId = parseResourceId(databaseOutput, "the D1 database");
+    await run(["bunx", "wrangler", "d1", "create", databaseName], { quiet: true });
+    const databaseId = await resolveD1DatabaseId(databaseName, "the D1 database");
     config = replaceConfigValue(config, "name", workerName);
     config = replaceConfigValue(config, "database_name", databaseName);
     config = replaceConfigValue(config, "database_id", databaseId);
@@ -236,11 +278,11 @@ try {
     config = replaceConfigValue(config, "bucket_name", bucketName);
     await Bun.write(WRANGLER_CONFIG, config);
 
-    const sessionOutput = await run(
-      ["bunx", "wrangler", "kv", "namespace", "create", `${workerName}-sessions`, "--json"],
+    await run(
+      ["bunx", "wrangler", "kv", "namespace", "create", `${workerName}-sessions`],
       { quiet: true },
     );
-    config = replaceConfigValue(config, "id", parseResourceId(sessionOutput, "the session namespace"));
+    config = replaceConfigValue(config, "id", await resolveKvNamespaceId(`${workerName}-sessions`, "the session namespace"));
     await Bun.write(WRANGLER_CONFIG, config);
 
     const encryptionKey = await run(["bunx", "emdash", "secrets", "generate"], { quiet: true });
@@ -278,11 +320,11 @@ try {
         `Create ${newsletterDatabaseName}, apply its remote migration, enable newsletter signup for ${expectedHostname}, and configure transactional sender ${senderAddress}? [y/N] `,
       );
       if (/^y(es)?$/i.test(confirmation.trim())) {
-        const newsletterOutput = await run(
-          ["bunx", "wrangler", "d1", "create", newsletterDatabaseName, "--json"],
+        await run(
+          ["bunx", "wrangler", "d1", "create", newsletterDatabaseName],
           { quiet: true },
         );
-        const newsletterDatabaseId = parseResourceId(newsletterOutput, "the newsletter D1 database");
+        const newsletterDatabaseId = await resolveD1DatabaseId(newsletterDatabaseName, "the newsletter D1 database");
         config = appendD1Database(config, {
           binding: "NEWSLETTER_DB",
           database_name: newsletterDatabaseName,

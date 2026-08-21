@@ -35,6 +35,10 @@ to `wrangler.jsonc` and deploys. Do not deploy while the placeholder IDs remain,
 and do not manually replace only some placeholders: the setup script rejects
 partially configured core bindings to prevent duplicate resources.
 
+Wrangler 4.120 does not accept a `--json` flag on `wrangler d1 create`.
+Do not add that flag to D1 provisioning commands; use the currently supported
+machine-readable output or a documented API response instead.
+
 Secrets are stored in Cloudflare, never committed. `.dev.vars` is ignored and
 is only for local development; it cannot create Cloudflare bindings. The
 newsletter setup is optional and needs a verified Email Sending domain,
