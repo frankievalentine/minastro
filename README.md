@@ -125,8 +125,10 @@ EmDash is the runtime source of truth. It owns:
 
 `src/site.config.ts` intentionally owns presentation values without an EmDash
 equivalent: the starter avatar, bio, location, roles, social links, analytics,
-and newsletter integration settings. It also provides fallbacks for identity
-and navigation only when CMS settings or a primary menu are absent.
+and newsletter integration settings. Site identity (title, tagline, logo) and
+primary navigation have no local fallbacks — they come from the CMS only. A
+missing CMS site title fails visibly, and an absent or empty primary menu
+renders no navigation items.
 
 New empty databases receive `.emdash/seed.json`, including initial site
 settings, representative posts, projects, and a CMS-managed **Start here**
@@ -139,19 +141,19 @@ seed.
 
 The committed `.emdash/types.ts` and `.emdash/schema.json` are generated
 artifacts describing the default model seeded by this repository, so a fresh
-clone gets typed `posts` and `projects` queries out of the box. They reflect a
-running schema, not an independent source of truth: after changing the content
-model (in the CMS or the seed), regenerate them from a running EmDash instance:
+clone gets typed queries for every seeded collection out of the box. They are
+derived deterministically from `.emdash/seed.json`: after changing the content
+model in the seed, regenerate them offline (no running server or auth needed):
 
 ```bash
-bun run types:generate -- --url http://localhost:4321
+bun run types:generate
 ```
 
-Then commit the updated `.emdash/types.ts` and `.emdash/schema.json`. Never
-pass or commit auth tokens; generate against a local runtime or an instance you
-authenticate with interactively. `src/emdash-types.d.ts` only maps collection
-slugs to the generated interfaces — do not hand-maintain field definitions
-there.
+Then commit the updated `.emdash/types.ts` and `.emdash/schema.json`. The
+generator reuses EmDash's own type-generation code, so its output matches what
+`emdash types` emits for a database seeded with that file.
+`src/emdash-types.d.ts` only maps collection slugs to the generated interfaces —
+do not hand-maintain field definitions there.
 
 ### Add a sidebar page
 
@@ -176,6 +178,16 @@ is a template-level override, not an EmDash-native integration. All other
 built-in Portable Text components are rendered by the EmDash renderer unless
 locally overridden.
 
+### Comments
+
+Comments are enabled on **Posts** via `commentsEnabled` in `.emdash/seed.json`.
+EmDash's migration defaults supply the rest of the policy on fresh databases:
+first-time-commenter moderation and auto-approval for authenticated EmDash
+users. One caveat: as of emdash 0.32 the seed format cannot express the
+auto-closure window, which defaults to 90 days. To keep post comments open
+indefinitely, set **Auto-close comments** to `0` once per deployment in
+**EmDash → Posts → collection settings**.
+
 ## Newsletter and Resend
 
 The newsletter page is visible by default so the template demonstrates the
@@ -199,7 +211,7 @@ the full operational flow.
 | `bun run build` | Build Worker SSR output |
 | `bun run check` | Run Astro checks and ESLint |
 | `bun run seed:validate` | Validate `.emdash/seed.json` with EmDash |
-| `bun run types:generate` | Generate `.emdash/types.ts` and `.emdash/schema.json` from a running EmDash URL (`-- --url <url>`) |
+| `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` from `.emdash/seed.json` |
 | `bun run cloudflare:setup` | Provision and deploy the initial Cloudflare stack |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |
 
