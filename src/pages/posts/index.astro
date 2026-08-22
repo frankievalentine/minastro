@@ -39,12 +39,10 @@ if (error) {
 }
 
 const featuredImage = (value: unknown, alt: string) => {
-  if (typeof value === "object" && value !== null && "featuredImage" in value) value = value.featuredImage;
-  if (typeof value === "string" && value.trim()) return { url: value, alt };
-  if (typeof value === "object" && value !== null && "url" in value && typeof value.url === "string" && value.url.trim()) {
-    return { url: value.url, alt: "alt" in value && typeof value.alt === "string" && value.alt.trim() ? value.alt : alt };
-  }
-  return undefined;
+  if (typeof value !== "object" || value === null) return undefined;
+  const { src, alt: imageAlt } = value as { src?: unknown; alt?: unknown };
+  if (typeof src !== "string" || !src.trim()) return undefined;
+  return { src, alt: typeof imageAlt === "string" && imageAlt.trim() ? imageAlt : alt };
 };
 ---
 
@@ -81,38 +79,6 @@ const featuredImage = (value: unknown, alt: string) => {
       Writing on engineering, projects, and ideas worth sharing.
     </p>
 
-    <section aria-labelledby="post-example-heading" class="mb-12">
-      <div class="mb-4">
-        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Example output</p>
-        <h2 id="post-example-heading" class="mt-1 text-xl font-semibold tracking-tight">A complete post card</h2>
-        <p class="mt-1.5 text-sm text-muted-foreground">This static example shows how the template presents the available EmDash fields.</p>
-      </div>
-      <a href="/posts/example" class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <article class="card overflow-hidden transition-colors group-hover:bg-accent/40">
-          <section>
-            <img class="mb-5 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src="/featured-post.svg" alt="Abstract editorial lines and shapes representing a published article" />
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0 flex-1">
-                <div class="mb-2 flex flex-wrap items-center gap-2">
-                  <span class="badge-secondary text-xs">Rich content</span>
-                  <span class="text-xs text-muted-foreground">Portable Text</span>
-                </div>
-                <h3 class="text-base font-semibold leading-snug text-foreground group-hover:underline">Designing a calmer publishing workflow</h3>
-                <p class="mt-1 text-sm leading-relaxed text-muted-foreground">A practical look at organizing drafts, revisions, images, and publishing without moving content into the codebase.</p>
-              </div>
-            </div>
-            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <time datetime="2026-08-12">August 12, 2026</time>
-              <span aria-hidden="true">·</span>
-              <span>4 min read</span>
-              <span class="badge-outline text-xs">EmDash</span>
-              <span class="badge-outline text-xs">Workflow</span>
-            </div>
-          </section>
-        </article>
-      </a>
-    </section>
-
     <section aria-labelledby="published-posts-heading">
       <div class="mb-4">
         <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Published in EmDash</p>
@@ -124,7 +90,7 @@ const featuredImage = (value: unknown, alt: string) => {
             <a href={`/posts/${post.data.slug}`} class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <article class="card h-full transition-colors group-hover:bg-accent/40">
                 <section>
-                  {featuredImage(post.data, post.data.title) && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src={featuredImage(post.data, post.data.title)?.url} alt={featuredImage(post.data, post.data.title)?.alt} loading="lazy" />}
+                  {featuredImage(post.data.featured_image, post.data.title) && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src={featuredImage(post.data.featured_image, post.data.title)?.src} alt={featuredImage(post.data.featured_image, post.data.title)?.alt} loading="lazy" />}
                   <div class="flex items-start justify-between gap-4">
                     <div class="min-w-0 flex-1">
                       <h3 class="mb-1 text-base font-semibold leading-snug text-foreground">{post.data.title}</h3>

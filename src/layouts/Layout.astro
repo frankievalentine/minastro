@@ -2,8 +2,9 @@
 import "../styles/global.css";
 import { ClientRouter } from "astro:transitions";
 import Search from "../components/Search.astro";
+import SidebarNavigationIcon from "../components/SidebarNavigationIcon.astro";
 import { siteConfig } from "../site.config";
-import { getMenu, getSiteSettings } from "emdash";
+import { getEmDashCollection, getMenu, getSiteSettings } from "emdash";
 
 interface Props {
   currentPage?: string;
@@ -12,10 +13,72 @@ interface Props {
   title?: string;
 }
 
-const [cmsSettings, primaryMenu] = await Promise.all([
+type NavigationIconKey = "page" | "book" | "user" | "briefcase" | "compass" | "link" | "file" | "folder" | "calendar" | "heart" | "star" | "lightbulb" | "globe" | "code" | "camera" | "music" | "message" | "settings";
+
+const navigationIconKeys = new Set<NavigationIconKey>([
+  "page",
+  "book",
+  "user",
+  "briefcase",
+  "compass",
+  "link",
+  "file",
+  "folder",
+  "calendar",
+  "heart",
+  "star",
+  "lightbulb",
+  "globe",
+  "code",
+  "camera",
+  "music",
+  "message",
+  "settings",
+]);
+
+const [cmsSettings, primaryMenu, navigationIconsResult, pagesResult] = await Promise.all([
   getSiteSettings(),
   getMenu("primary"),
+  getEmDashCollection("navigation_icons", { status: "published" }),
+  getEmDashCollection("pages", { status: "published" }),
 ]);
+
+if (navigationIconsResult.error) {
+  throw navigationIconsResult.error;
+}
+
+if (pagesResult.error) {
+  throw pagesResult.error;
+}
+
+const pageUrlsByReference = new Map<string, string>();
+for (const { id, data } of pagesResult.entries) {
+  const slug = typeof data.slug === "string" && data.slug.trim() ? data.slug : undefined;
+  if (!slug) continue;
+  const url = `/${slug}`;
+  pageUrlsByReference.set(id, url);
+  pageUrlsByReference.set(slug, url);
+  if (typeof data.id === "string" && data.id.trim()) {
+    pageUrlsByReference.set(data.id, url);
+  }
+}
+
+const pageNavigationIcons = new Map<string, NavigationIconKey>();
+for (const { data } of navigationIconsResult.entries) {
+  const reference = typeof data.page === "string" ? data.page.trim() : "";
+  const iconKey = data.icon_key;
+  if (
+    !reference ||
+    typeof iconKey !== "string" ||
+    !navigationIconKeys.has(iconKey as NavigationIconKey)
+  ) {
+    continue;
+  }
+  const pageUrl = pageUrlsByReference.get(reference);
+  if (pageUrl && !pageNavigationIcons.has(pageUrl)) {
+    pageNavigationIcons.set(pageUrl, iconKey as NavigationIconKey);
+  }
+}
 
 const cmsTitle =
   typeof cmsSettings?.title === "string" && cmsSettings.title.trim()
@@ -29,8 +92,36 @@ const cmsLogo =
   typeof cmsSettings?.logo?.url === "string" && cmsSettings.logo.url.trim()
     ? cmsSettings.logo.url
     : null;
-const siteName = cmsTitle ?? siteConfig.title;
-const siteTagline = cmsTagline ?? "Your title";
+const socialProfileUrl = (value: string | undefined, profileBase: string): string | undefined => {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const candidate = value.trim();
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    const handle = candidate.replace(/^@/, "");
+    return /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(handle)
+      ? `${profileBase}${encodeURIComponent(handle)}`
+      : undefined;
+  }
+};
+const preferredSocialValue = (cmsValue: string | undefined, fallback: string | undefined) =>
+  typeof cmsValue === "string" && cmsValue.trim() ? cmsValue : fallback;
+const social = {
+  github: socialProfileUrl(preferredSocialValue(cmsSettings?.social?.github, siteConfig.social.github), "https://github.com/"),
+  twitter: socialProfileUrl(preferredSocialValue(cmsSettings?.social?.twitter, siteConfig.social.twitter), "https://x.com/"),
+  linkedin: socialProfileUrl(preferredSocialValue(cmsSettings?.social?.linkedin, siteConfig.social.linkedin), "https://www.linkedin.com/in/"),
+  email: siteConfig.social.email,
+};
+// Runtime identity is CMS-owned only. A missing site title is a visible
+// configuration failure, not a fallback condition.
+if (!cmsTitle) {
+  throw new Error(
+    "CMS site settings are missing a title. Set one in EmDash → Settings; there is no local identity fallback.",
+  );
+}
+const siteName = cmsTitle;
+const siteTagline = cmsTagline ?? "";
 
 const cmsNav = (primaryMenu?.items ?? [])
   .filter(
@@ -46,11 +137,8 @@ const cmsNav = (primaryMenu?.items ?? [])
     target: typeof item.target === "string" ? item.target : undefined,
   }));
 // A resolved primary menu is authoritative, even when intentionally empty.
-// Local navigation is only a fallback for a missing menu.
-const primaryNav =
-  primaryMenu == null
-    ? siteConfig.nav.map((item) => ({ ...item, target: undefined }))
-    : cmsNav;
+// With no menu configured, the sidebar simply renders no navigation items.
+const primaryNav = cmsNav;
 
 const {
   title: pageTitle,
@@ -59,20 +147,11 @@ const {
   standalone = false,
 } = Astro.props;
 const title = pageTitle ?? siteName;
-const description = pageDescription ?? cmsTagline ?? siteConfig.description;
+const description = pageDescription ?? cmsTagline ?? "";
 
 const siteTitle =
   title === siteName ? title : `${title} • ${siteName}`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
-
-// Nav icon paths keyed by href
-const navIcons: Record<string, string> = {
-  "/": `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
-  "/posts": `<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>`,
-  "/projects": `<path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path>`,
-  "/newsletter": `<rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>`,
-  page: `<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M8 13h8"></path><path d="M8 17h6"></path>`,
-};
 
 function isActive(href: string): boolean {
   if (href === "/") {
@@ -136,7 +215,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     <link
       rel="alternate"
       type="application/rss+xml"
-      title={siteConfig.title}
+      title={siteName}
       href="/rss.xml"
     >
 
@@ -217,16 +296,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                                         rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
                                         aria-current={isActive(item.href) ? "page" : undefined}
                                     >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            aria-hidden="true"
-                                            set:html={navIcons[item.href] ?? navIcons.page}
+                                        <SidebarNavigationIcon
+                                            href={item.href}
+                                            icon={pageNavigationIcons.get(item.href)}
                                         />
                                         <span>{item.label}</span>
                                     </a>
@@ -307,9 +379,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
             >
               <!-- Social links -->
               <div class="py-1">
-                {siteConfig.social.github && (
+                {social.github && (
                                     <a
-                                        href={siteConfig.social.github}
+                                        href={social.github}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -333,9 +405,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                                         GitHub
                                     </a>
                                 )}
-                {siteConfig.social.twitter && (
+                {social.twitter && (
                                     <a
-                                        href={siteConfig.social.twitter}
+                                        href={social.twitter}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -359,9 +431,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                                         X
                                     </a>
                                 )}
-                {siteConfig.social.linkedin && (
+                {social.linkedin && (
                                     <a
-                                        href={siteConfig.social.linkedin}
+                                        href={social.linkedin}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -386,9 +458,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                                         LinkedIn
                                     </a>
                                 )}
-                {siteConfig.social.email && (
+                {social.email && (
                                     <a
-                                        href={`mailto:${siteConfig.social.email}`}
+                                        href={`mailto:${social.email}`}
                                         class="flex items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                                     >
                                         <svg

@@ -10,6 +10,7 @@ export interface Post {
   title: string;
   description: string;
   content?: PortableTextBlock[];
+  featured?: boolean;
   featured_image?: { id: string; src?: string; alt?: string; width?: number; height?: number; provider?: string; previewUrl?: string; meta?: Record<string, unknown> };
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +31,70 @@ export interface Project {
   github?: string;
   featured?: boolean;
   featured_image?: { id: string; src?: string; alt?: string; width?: number; height?: number; provider?: string; previewUrl?: string; meta?: Record<string, unknown> };
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
+export interface Page {
+  id: string;
+  slug: string | null;
+  status: string;
+  title: string;
+  description: string;
+  content?: PortableTextBlock[];
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
+export interface Home {
+  id: string;
+  slug: string | null;
+  status: string;
+  eyebrow?: string;
+  title: string;
+  description: string;
+  highlights_title: string;
+  highlights_description?: string;
+  posts_title: string;
+  posts_description?: string;
+  projects_title: string;
+  projects_description?: string;
+  newsletter_cta_label: string;
+  newsletter_cta_href: string;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
+export interface HomeHighlight {
+  id: string;
+  slug: string | null;
+  status: string;
+  title: string;
+  description: string;
+  icon_key: "database" | "workflow" | "search" | "mail";
+  sort_order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
+export interface NavigationIcon {
+  id: string;
+  slug: string | null;
+  status: string;
+  page: string;
+  icon_key: "page" | "book" | "user" | "briefcase" | "compass" | "link" | "file" | "folder" | "calendar" | "heart" | "star" | "lightbulb" | "globe" | "code" | "camera" | "music" | "message" | "settings";
   createdAt: Date;
   updatedAt: Date;
   publishedAt: Date | null;

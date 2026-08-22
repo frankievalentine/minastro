@@ -37,6 +37,13 @@
           "unique": false
         },
         {
+          "slug": "featured",
+          "label": "Featured",
+          "type": "boolean",
+          "required": false,
+          "unique": false
+        },
+        {
           "slug": "featured_image",
           "label": "Featured image",
           "type": "image",
@@ -117,7 +124,238 @@
           "unique": false
         }
       ]
+    },
+    {
+      "slug": "pages",
+      "label": "Pages",
+      "labelSingular": "Page",
+      "description": "CMS-managed site pages",
+      "icon": "file-text",
+      "supports": [
+        "drafts",
+        "revisions",
+        "preview",
+        "scheduling",
+        "search",
+        "seo"
+      ],
+      "fields": [
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "Description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "content",
+          "label": "Content",
+          "type": "portableText",
+          "required": false,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "home",
+      "label": "Home",
+      "labelSingular": "Home",
+      "description": "Homepage editorial content",
+      "icon": "home",
+      "supports": [
+        "drafts",
+        "revisions",
+        "preview"
+      ],
+      "fields": [
+        {
+          "slug": "eyebrow",
+          "label": "Eyebrow",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "Description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "highlights_title",
+          "label": "Highlights title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "highlights_description",
+          "label": "Highlights description",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "posts_title",
+          "label": "Posts title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "posts_description",
+          "label": "Posts description",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "projects_title",
+          "label": "Projects title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "projects_description",
+          "label": "Projects description",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "newsletter_cta_label",
+          "label": "Newsletter CTA label",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "newsletter_cta_href",
+          "label": "Newsletter CTA URL",
+          "type": "string",
+          "required": true,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "home_highlights",
+      "label": "Home Highlights",
+      "labelSingular": "Home Highlight",
+      "description": "Ordered feature cards for the homepage",
+      "icon": "sparkles",
+      "supports": [
+        "drafts",
+        "revisions",
+        "preview"
+      ],
+      "fields": [
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "Description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "icon_key",
+          "label": "Icon",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "database",
+              "workflow",
+              "search",
+              "mail"
+            ]
+          }
+        },
+        {
+          "slug": "sort_order",
+          "label": "Sort order",
+          "type": "number",
+          "required": true,
+          "unique": false
+        }
+      ]
+    },
+    {
+      "slug": "navigation_icons",
+      "label": "Navigation Icons",
+      "labelSingular": "Navigation Icon",
+      "description": "Sidebar icon choices for CMS Pages",
+      "icon": "menu",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "fields": [
+        {
+          "slug": "page",
+          "label": "Page",
+          "type": "reference",
+          "required": true,
+          "unique": false,
+          "options": {
+            "collection": "pages"
+          }
+        },
+        {
+          "slug": "icon_key",
+          "label": "Icon",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "validation": {
+            "options": [
+              "page",
+              "book",
+              "user",
+              "briefcase",
+              "compass",
+              "link",
+              "file",
+              "folder",
+              "calendar",
+              "heart",
+              "star",
+              "lightbulb",
+              "globe",
+              "code",
+              "camera",
+              "music",
+              "message",
+              "settings"
+            ]
+          }
+        }
+      ]
     }
   ],
-  "version": "99398ff223f9621d"
+  "version": "2a30459833443175"
 }

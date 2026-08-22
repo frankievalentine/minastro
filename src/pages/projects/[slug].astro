@@ -25,16 +25,14 @@ interface ProjectData {
   url?: string;
   publishedAt?: Date;
   tags: ProjectTag[];
-  featuredImage?: { url: string; alt: string };
+  featuredImage?: { src: string; alt: string };
 }
 
 const featuredImage = (value: unknown, alt: string) => {
-  if (typeof value === "object" && value !== null && "featuredImage" in value) value = value.featuredImage;
-  if (typeof value === "string" && value.trim()) return { url: value, alt };
-  if (typeof value === "object" && value !== null && "url" in value && typeof value.url === "string" && value.url.trim()) {
-    return { url: value.url, alt: "alt" in value && typeof value.alt === "string" && value.alt.trim() ? value.alt : alt };
-  }
-  return undefined;
+  if (typeof value !== "object" || value === null) return undefined;
+  const { src, alt: imageAlt } = value as { src?: unknown; alt?: unknown };
+  if (typeof src !== "string" || !src.trim()) return undefined;
+  return { src, alt: typeof imageAlt === "string" && imageAlt.trim() ? imageAlt : alt };
 };
 
 const statusLabel: Record<string, string> = {
@@ -75,7 +73,7 @@ const projectData: ProjectData = {
     label: tag.label ?? tag.name,
     name: tag.name,
   })),
-  featuredImage: featuredImage(entry.data, entry.data.title),
+  featuredImage: featuredImage(entry.data.featured_image, entry.data.title),
 };
 ---
 
@@ -121,7 +119,7 @@ const projectData: ProjectData = {
       <p class="text-muted-foreground leading-relaxed mb-4">
         {projectData.description}
       </p>
-      {projectData.featuredImage && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover" src={projectData.featuredImage.url} alt={projectData.featuredImage.alt} />}
+      {projectData.featuredImage && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover" src={projectData.featuredImage.src} alt={projectData.featuredImage.alt} />}
 
       <!-- Meta links -->
       <div class="flex items-center gap-4 flex-wrap">

@@ -1,7 +1,6 @@
 import { getEmDashCollection, getSiteSettings } from "emdash";
 import rss from "@astrojs/rss";
 import type { APIContext } from "astro";
-import { siteConfig } from "../site.config";
 
 export async function GET(context: APIContext) {
   interface RssItem {
@@ -12,15 +11,21 @@ export async function GET(context: APIContext) {
   }
 
   // Settings failures must surface, not fall back silently.
+  // Runtime identity is CMS-owned only; there is no local fallback.
   const settings = await getSiteSettings();
   const rssTitle =
     typeof settings?.title === "string" && settings.title.trim()
       ? settings.title
-      : siteConfig.title;
+      : null;
+  if (!rssTitle) {
+    throw new Error(
+      "CMS site settings are missing a title. Set one in EmDash → Settings; there is no local identity fallback.",
+    );
+  }
   const rssDescription =
     typeof settings?.tagline === "string" && settings.tagline.trim()
       ? settings.tagline
-      : siteConfig.description;
+      : "";
 
   const { entries: posts, error } = await getEmDashCollection("posts", {
     status: "published",

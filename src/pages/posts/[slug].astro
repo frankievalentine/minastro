@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
 
-import { getEmDashEntry, getSiteSettings, extractPlainText } from "emdash";
-import { PortableText } from "emdash/ui";
+import { getCollectionInfo, getEmDashEntry, getSiteSettings, extractPlainText } from "emdash";
+import { CommentForm, Comments, PortableText } from "emdash/ui";
 import BackToTop from "../../components/ui/BackToTop.astro";
 import CodeBlock from "../../components/CodeBlock.astro";
 import Layout from "../../layouts/Layout.astro";
@@ -24,16 +24,14 @@ interface PostData {
   publishedAt: Date | null;
   slug: string;
   tags: PostTag[];
-  featuredImage?: { url: string; alt: string };
+  featuredImage?: { src: string; alt: string };
 }
 
 const featuredImage = (value: unknown, alt: string) => {
-  if (typeof value === "object" && value !== null && "featuredImage" in value) value = value.featuredImage;
-  if (typeof value === "string" && value.trim()) return { url: value, alt };
-  if (typeof value === "object" && value !== null && "url" in value && typeof value.url === "string" && value.url.trim()) {
-    return { url: value.url, alt: "alt" in value && typeof value.alt === "string" && value.alt.trim() ? value.alt : alt };
-  }
-  return undefined;
+  if (typeof value !== "object" || value === null) return undefined;
+  const { src, alt: imageAlt } = value as { src?: unknown; alt?: unknown };
+  if (typeof src !== "string" || !src.trim()) return undefined;
+  return { src, alt: typeof imageAlt === "string" && imageAlt.trim() ? imageAlt : alt };
 };
 
 const { entry, error, isPreview } = await getEmDashEntry("posts", slug);
@@ -50,11 +48,16 @@ if (entry.data.status !== "published" && !isPreview) {
   return new Response(null, { status: 404 });
 }
 
-const cmsSettings = await getSiteSettings();
+const [cmsSettings, postsCollection] = await Promise.all([
+  getSiteSettings(),
+  getCollectionInfo("posts"),
+]);
 const dateFormat =
   typeof cmsSettings.dateFormat === "string" ? cmsSettings.dateFormat : undefined;
 const timezone =
   typeof cmsSettings.timezone === "string" ? cmsSettings.timezone : undefined;
+const commentsEnabled = postsCollection?.commentsEnabled ?? false;
+const showComments = commentsEnabled && entry.data.status === "published";
 const portableTextContent = entry.data.content;
 const contentRaw = extractPlainText(portableTextContent);
 const postData: PostData = {
@@ -66,7 +69,7 @@ const postData: PostData = {
     label: tag.label ?? tag.name,
     name: tag.name,
   })),
-  featuredImage: featuredImage(entry.data, entry.data.title),
+  featuredImage: featuredImage(entry.data.featured_image, entry.data.title),
 };
 
 const timeToRead = readingTime(contentRaw);
@@ -111,7 +114,7 @@ const timeToRead = readingTime(contentRaw);
       <p class="text-muted-foreground leading-relaxed mb-4">
         {postData.description}
       </p>
-      {postData.featuredImage && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover" src={postData.featuredImage.url} alt={postData.featuredImage.alt} />}
+      {postData.featuredImage && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover" src={postData.featuredImage.src} alt={postData.featuredImage.alt} />}
       <div class="flex items-center gap-3 flex-wrap">
         {postData.publishedAt && (
           <>
@@ -144,6 +147,47 @@ const timeToRead = readingTime(contentRaw);
     <div class="prose prose-sm prose-neutral dark:prose-invert max-w-none">
       <PortableText value={portableTextContent} components={{ type: { code: CodeBlock } }} />
     </div>
+
+    {showComments && (
+      <>
+        <div role="separator" class="border-t border-border mt-12 mb-8"></div>
+
+        <section aria-labelledby="comments-heading">
+          <div class="mb-6">
+            <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Conversation</p>
+            <h2 id="comments-heading" class="mt-1 text-xl font-semibold tracking-tight">Discussion</h2>
+            <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+              Share a question, response, or useful detail about this post.
+            </p>
+          </div>
+
+          <Comments
+            collection="posts"
+            contentId={entry.data.id}
+            threaded
+            class="post-comments-list"
+          />
+
+          <div class="mt-8 rounded-lg border border-border bg-card p-5 sm:p-6">
+            <h3 class="text-base font-semibold tracking-tight">Leave a comment</h3>
+            {postsCollection?.commentsModeration === "first_time" ? (
+              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+                Your first comment may need approval before it appears.
+              </p>
+            ) : postsCollection?.commentsModeration === "all" ? (
+              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+                Comments may need approval before they appear.
+              </p>
+            ) : null}
+            <CommentForm
+              collection="posts"
+              contentId={entry.data.id}
+              class="post-comment-form mt-5"
+            />
+          </div>
+        </section>
+      </>
+    )}
 
     <div role="separator" class="border-t border-border mt-12 mb-8"></div>
 
@@ -200,5 +244,86 @@ const timeToRead = readingTime(contentRaw);
   }
   .prose blockquote {
     @apply border-l-2 border-border pl-4 italic text-muted-foreground;
+  }
+
+  .post-comments-list {
+    --ec-comment-gap: 1.5rem;
+    --ec-comment-indent: 1.5rem;
+    --ec-comment-border: 1px solid var(--border);
+  }
+  .post-comments-list .ec-comments-heading {
+    @apply mb-5 text-sm font-medium text-foreground;
+  }
+  .post-comments-list .ec-comment-header {
+    @apply gap-x-2 gap-y-0.5;
+  }
+  .post-comments-list .ec-comment-author {
+    @apply text-sm font-semibold text-foreground;
+  }
+  .post-comments-list .ec-comment-date {
+    @apply text-xs text-muted-foreground;
+    opacity: 1;
+  }
+  .post-comments-list .ec-comment-body {
+    @apply mt-2 text-sm leading-relaxed text-muted-foreground;
+  }
+  .post-comments-list .ec-comment-body a {
+    @apply text-foreground underline underline-offset-4 transition-colors hover:text-muted-foreground;
+  }
+  .post-comments-list .ec-comment-badge {
+    @apply text-muted-foreground;
+  }
+
+  .post-comment-form {
+    --ec-form-gap: 0.875rem;
+    --ec-form-bg: var(--background);
+    --ec-form-border: var(--border);
+    --ec-form-color: var(--foreground);
+    --ec-form-user-bg: var(--muted);
+    --ec-form-user-bg-dark: var(--muted);
+    --ec-form-user-border: var(--border);
+    --ec-form-submit-bg: var(--foreground);
+    --ec-form-submit-color: var(--background);
+    --ec-form-success-color: var(--foreground);
+    --ec-form-error-color: var(--destructive);
+  }
+  .post-comment-form .ec-comment-form-field {
+    @apply gap-1.5 text-sm font-medium text-foreground;
+  }
+  .post-comment-form .ec-comment-form-field input,
+  .post-comment-form .ec-comment-form-field textarea {
+    @apply rounded-md px-3 py-2.5 text-base leading-normal shadow-sm transition-colors;
+  }
+  .post-comment-form .ec-comment-form-field textarea {
+    min-height: 7rem;
+    resize: vertical;
+  }
+  .post-comment-form .ec-comment-form-field input:hover,
+  .post-comment-form .ec-comment-form-field textarea:hover {
+    border-color: color-mix(in oklch, var(--border) 65%, var(--foreground));
+  }
+  .post-comment-form .ec-comment-form-field input:focus-visible,
+  .post-comment-form .ec-comment-form-field textarea:focus-visible,
+  .post-comment-form .ec-comment-form-submit:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .post-comment-form .ec-comment-user-info {
+    @apply flex-wrap rounded-md text-sm text-muted-foreground;
+  }
+  .post-comment-form .ec-comment-user-name {
+    @apply text-foreground;
+  }
+  .post-comment-form .ec-comment-form-submit {
+    @apply min-h-10 rounded-md px-4 text-sm transition-opacity hover:opacity-85;
+  }
+  .post-comment-form .ec-comment-form-status {
+    @apply text-sm leading-relaxed;
+  }
+
+  @media (max-width: 30rem) {
+    .post-comments-list {
+      --ec-comment-indent: 1rem;
+    }
   }
 </style>

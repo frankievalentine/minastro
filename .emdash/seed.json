@@ -21,10 +21,12 @@
       "icon": "file-text",
       "supports": ["drafts", "revisions", "preview", "scheduling", "search", "seo"],
       "urlPattern": "/posts/{slug}",
+      "commentsEnabled": true,
       "fields": [
         { "slug": "title", "label": "Title", "type": "string", "required": true },
         { "slug": "description", "label": "Description", "type": "text", "required": true },
         { "slug": "content", "label": "Content", "type": "portableText" },
+        { "slug": "featured", "label": "Featured", "type": "boolean" },
         { "slug": "featured_image", "label": "Featured image", "type": "image" }
       ]
     },
@@ -60,6 +62,53 @@
         { "slug": "description", "label": "Description", "type": "text", "required": true },
         { "slug": "content", "label": "Content", "type": "portableText" }
       ]
+    },
+    {
+      "slug": "home",
+      "label": "Home",
+      "labelSingular": "Home",
+      "description": "Homepage editorial content",
+      "icon": "home",
+      "supports": ["drafts", "revisions", "preview"],
+      "fields": [
+        { "slug": "eyebrow", "label": "Eyebrow", "type": "string" },
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "description", "label": "Description", "type": "text", "required": true },
+        { "slug": "highlights_title", "label": "Highlights title", "type": "string", "required": true },
+        { "slug": "highlights_description", "label": "Highlights description", "type": "text" },
+        { "slug": "posts_title", "label": "Posts title", "type": "string", "required": true },
+        { "slug": "posts_description", "label": "Posts description", "type": "text" },
+        { "slug": "projects_title", "label": "Projects title", "type": "string", "required": true },
+        { "slug": "projects_description", "label": "Projects description", "type": "text" },
+        { "slug": "newsletter_cta_label", "label": "Newsletter CTA label", "type": "string", "required": true },
+        { "slug": "newsletter_cta_href", "label": "Newsletter CTA URL", "type": "string", "required": true }
+      ]
+    },
+    {
+      "slug": "home_highlights",
+      "label": "Home Highlights",
+      "labelSingular": "Home Highlight",
+      "description": "Ordered feature cards for the homepage",
+      "icon": "sparkles",
+      "supports": ["drafts", "revisions", "preview"],
+      "fields": [
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "description", "label": "Description", "type": "text", "required": true },
+        { "slug": "icon_key", "label": "Icon", "type": "select", "required": true, "validation": { "options": ["database", "workflow", "search", "mail"] } },
+        { "slug": "sort_order", "label": "Sort order", "type": "number", "required": true }
+      ]
+    },
+    {
+      "slug": "navigation_icons",
+      "label": "Navigation Icons",
+      "labelSingular": "Navigation Icon",
+      "description": "Sidebar icon choices for CMS Pages",
+      "icon": "menu",
+      "supports": ["drafts", "revisions"],
+      "fields": [
+        { "slug": "page", "label": "Page", "type": "reference", "required": true, "options": { "collection": "pages" } },
+        { "slug": "icon_key", "label": "Icon", "type": "select", "required": true, "validation": { "options": ["page", "book", "user", "briefcase", "compass", "link", "file", "folder", "calendar", "heart", "star", "lightbulb", "globe", "code", "camera", "music", "message", "settings"] } }
+      ]
     }
   ],
   "taxonomies": [
@@ -79,12 +128,37 @@
         { "type": "custom", "label": "About", "url": "/" },
         { "type": "custom", "label": "Posts", "url": "/posts" },
         { "type": "custom", "label": "Projects", "url": "/projects" },
-        { "type": "page", "label": "Start here", "ref": "start-here" },
         { "type": "custom", "label": "Newsletter", "url": "/newsletter" }
       ]
     }
   ],
   "content": {
+    "home": [
+      {
+        "id": "home",
+        "slug": "home",
+        "status": "published",
+        "data": {
+          "eyebrow": "minastro",
+          "title": "A focused home for your work.",
+          "description": "Minastro is a quiet, responsive starter for publishing thoughtful posts and showing the projects behind them. EmDash is the source of truth for content, and the complete site deploys directly to Cloudflare.",
+          "highlights_title": "Highlighted features",
+          "highlights_description": "A practical publishing foundation, already connected from editing through deployment.",
+          "posts_title": "Latest writing",
+          "posts_description": "Published posts from EmDash, ordered by date.",
+          "projects_title": "Selected work",
+          "projects_description": "Featured projects from EmDash, ordered by date.",
+          "newsletter_cta_label": "Subscribe to the newsletter",
+          "newsletter_cta_href": "/newsletter"
+        }
+      }
+    ],
+    "home_highlights": [
+      { "id": "home-highlight-content", "slug": "emdash-managed-content", "status": "published", "data": { "title": "EmDash-managed content", "description": "Manage posts, projects, menus, settings, and media without moving content into the codebase.", "icon_key": "database", "sort_order": 1 } },
+      { "id": "home-highlight-cloudflare", "slug": "one-command-cloudflare-setup", "status": "published", "data": { "title": "One-command Cloudflare setup", "description": "Provision the required bindings and deploy with bun run cloudflare:setup.", "icon_key": "workflow", "sort_order": 2 } },
+      { "id": "home-highlight-discovery", "slug": "search-and-rss", "status": "published", "data": { "title": "Search and RSS", "description": "Built-in search and an RSS feed keep published work easy to find and follow.", "icon_key": "search", "sort_order": 3 } },
+      { "id": "home-highlight-newsletter", "slug": "opt-in-newsletter", "status": "published", "data": { "title": "Opt-in newsletter", "description": "Add Turnstile-protected signup and Resend delivery only when the publication needs it.", "icon_key": "mail", "sort_order": 4 } }
+    ],
     "posts": [
       {
         "id": "welcome-to-your-site",
@@ -93,7 +167,6 @@
         "data": {
           "title": "Welcome to your site",
           "description": "Your first EmDash-powered post is already published and ready to edit.",
-          "featured_image": "/featured-post.svg",
           "content": [
             {
               "_type": "block",
@@ -223,7 +296,6 @@
         "data": {
           "title": "Personal site",
           "description": "A focused home for writing, projects, and an evolving body of work.",
-          "featured_image": "/featured-project.svg",
           "project_status": "active",
           "url": "https://your-domain.com",
           "github": "https://github.com/yourusername/minastro",

@@ -22,6 +22,10 @@ export default defineConfig({
     emdash({
       siteUrl: siteConfig.url,
       allowedOrigins: [],
+      // Cache-safe live editing: public HTML stays identical for all visitors
+      // (shared caches remain effective); editors get an "Edit" pill from a
+      // bootstrap script and a fresh, never-cached `_edit` render.
+      toolbar: "client",
       database: d1({ binding: "DB" }),
       storage: r2({ binding: "MEDIA" }),
     }),

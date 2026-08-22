@@ -16,7 +16,14 @@
  * import them). If a future CLI version fixes the emit, these can be removed.
  */
 
-import type { Post, Project } from "../.emdash/types";
+import type {
+  Home,
+  HomeHighlight,
+  NavigationIcon,
+  Page,
+  Post,
+  Project,
+} from "../.emdash/types";
 
 declare global {
   type ContentBylineCredit = import("emdash").ContentBylineCredit;
@@ -27,6 +34,10 @@ declare module "emdash" {
   interface EmDashCollections {
     posts: Post;
     projects: Project;
+    pages: Page;
+    home: Home;
+    home_highlights: HomeHighlight;
+    navigation_icons: NavigationIcon;
   }
 }
 

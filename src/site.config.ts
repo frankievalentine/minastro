@@ -6,10 +6,7 @@ export interface SiteConfig {
   };
   avatar: string;
   bio: string;
-  description: string;
   location: string;
-  name: string;
-  nav: Array<{ label: string; href: string }>;
   newsletter: {
     enabled: boolean;
     description?: string;
@@ -30,14 +27,14 @@ export interface SiteConfig {
     linkedin?: string;
     email?: string;
   };
-  title: string;
   url: string;
 }
 
+// Site identity (title, tagline, logo) and primary navigation are owned by the
+// EmDash CMS at runtime (Settings and the "primary" menu). This config holds
+// only presentation values with no EmDash equivalent; there are deliberately
+// no local fallbacks for CMS-owned identity or navigation.
 export const siteConfig: SiteConfig = {
-  name: "Your Name",
-  title: "Your Name",
-  description: "Your Name's personal website — engineer, maker, writer.",
   url: "https://your-domain.com",
   avatar: "/avatar.svg",
   location: "Your City",
@@ -62,9 +59,4 @@ export const siteConfig: SiteConfig = {
     url: "https://your-analytics.com/api/script.js",
     domain: "your-domain.com",
   },
-  nav: [
-    { label: "About", href: "/" },
-    { label: "Posts", href: "/posts" },
-    { label: "Projects", href: "/projects" },
-  ],
 };

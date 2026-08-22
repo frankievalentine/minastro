@@ -1,25 +1,64 @@
 ---
 import { getEmDashCollection, extractPlainText, type PortableTextBlock } from "emdash";
+import HomeHighlightIcon from "../components/HomeHighlightIcon.astro";
 import Layout from "../layouts/Layout.astro";
 import { formatDate, readingTime } from "../utils";
-type FeaturedImage = { url: string; alt: string };
+type FeaturedImage = { src: string; alt: string };
 type HomepagePost = { title: string; slug: string; description: string; publishedAt: Date | null; content: PortableTextBlock[]; tags: string[]; featuredImage?: FeaturedImage };
 type HomepageProject = { title: string; slug: string; description: string; publishedAt: Date | null; featured: boolean; projectStatus: string | undefined; github?: string; url?: string; tags: string[]; featuredImage?: FeaturedImage };
+type HighlightIcon = "database" | "workflow" | "search" | "mail";
+
+const highlightIcons = new Set<HighlightIcon>(["database", "workflow", "search", "mail"]);
+
+const requiredString = (data: object, key: string, collection: string): string => {
+  const value = (data as Record<string, unknown>)[key];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`The CMS ${collection} entry is missing its required ${key} field.`);
+  }
+  return value;
+};
+
+const optionalString = (data: object, key: string): string | undefined => {
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+};
+
+const safeCtaHref = (value: string): string => {
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") return value;
+  } catch {
+    // The validation error below identifies the CMS field that needs correction.
+  }
+  throw new Error("The CMS home entry has an invalid newsletter_cta_href field.");
+};
 
 const toDate = (value: unknown): Date | null => value instanceof Date ? value : null;
 const toFeaturedImage = (value: unknown, fallbackAlt: string): FeaturedImage | undefined => {
-  if (typeof value === "object" && value !== null && "featuredImage" in value) value = value.featuredImage;
-  if (typeof value === "string" && value.trim()) return { url: value, alt: fallbackAlt };
-  if (typeof value === "object" && value !== null && "url" in value && typeof value.url === "string" && value.url.trim()) {
-    return { url: value.url, alt: "alt" in value && typeof value.alt === "string" && value.alt.trim() ? value.alt : fallbackAlt };
-  }
-  return undefined;
+  if (typeof value !== "object" || value === null) return undefined;
+  const { src, alt } = value as { src?: unknown; alt?: unknown };
+  if (typeof src !== "string" || !src.trim()) return undefined;
+  return { src, alt: typeof alt === "string" && alt.trim() ? alt : fallbackAlt };
 };
 
-const [postsResult, projectsResult] = await Promise.all([
+const [homeResult, highlightsResult, postsResult, projectsResult] = await Promise.all([
+  getEmDashCollection("home", { status: "published" }),
+  getEmDashCollection("home_highlights", {
+    status: "published",
+    orderBy: { sort_order: "asc" },
+  }),
   getEmDashCollection("posts", { status: "published" }),
   getEmDashCollection("projects", { status: "published" }),
 ]);
+
+if (homeResult.error) {
+  throw homeResult.error;
+}
+
+if (highlightsResult.error) {
+  throw highlightsResult.error;
+}
 
 if (postsResult.error) {
   throw postsResult.error;
@@ -29,6 +68,35 @@ if (projectsResult.error) {
   throw projectsResult.error;
 }
 
+const homeData = homeResult.entries.find(({ id, data }) =>
+  id === "home" || data.slug === "home" || data.id === "home"
+)?.data;
+const home = homeData ? {
+  eyebrow: optionalString(homeData, "eyebrow"),
+  title: requiredString(homeData, "title", "home"),
+  description: requiredString(homeData, "description", "home"),
+  highlightsTitle: requiredString(homeData, "highlights_title", "home"),
+  highlightsDescription: optionalString(homeData, "highlights_description"),
+  postsTitle: requiredString(homeData, "posts_title", "home"),
+  postsDescription: optionalString(homeData, "posts_description"),
+  projectsTitle: requiredString(homeData, "projects_title", "home"),
+  projectsDescription: optionalString(homeData, "projects_description"),
+  newsletterCtaLabel: requiredString(homeData, "newsletter_cta_label", "home"),
+  newsletterCtaHref: safeCtaHref(requiredString(homeData, "newsletter_cta_href", "home")),
+} : null;
+
+const highlights = highlightsResult.entries.map(({ data }) => {
+  const iconKey = data.icon_key;
+  if (typeof iconKey !== "string" || !highlightIcons.has(iconKey as HighlightIcon)) {
+    throw new Error("A CMS home_highlights entry has an invalid icon_key field.");
+  }
+  return {
+    title: requiredString(data, "title", "home_highlights"),
+    description: requiredString(data, "description", "home_highlights"),
+    icon: iconKey as HighlightIcon,
+  };
+});
+
 const posts: HomepagePost[] = postsResult.entries.map((post) => ({
   title: post.data.title,
   slug: post.data.slug ?? "",
@@ -36,7 +104,7 @@ const posts: HomepagePost[] = postsResult.entries.map((post) => ({
   publishedAt: toDate(post.data.publishedAt),
   content: post.data.content ?? [],
   tags: (post.data.terms?.tag ?? []).map((tag) => tag.label ?? tag.name),
-  featuredImage: toFeaturedImage(post.data, post.data.title),
+  featuredImage: toFeaturedImage(post.data.featured_image, post.data.title),
 }));
 
 const projects: HomepageProject[] = projectsResult.entries.map((project) => ({
@@ -49,7 +117,7 @@ const projects: HomepageProject[] = projectsResult.entries.map((project) => ({
   github: project.data.github,
   url: project.data.url,
   tags: (project.data.terms?.tag ?? []).map((tag) => tag.label ?? tag.name),
-  featuredImage: toFeaturedImage(project.data, project.data.title),
+  featuredImage: toFeaturedImage(project.data.featured_image, project.data.title),
 }));
 
 const latestPosts = posts
@@ -64,140 +132,125 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
 
 <Layout title="About" currentPage="/">
   <div class="mx-auto max-w-3xl px-6 py-12 md:py-16">
-    <header class="mb-12 max-w-2xl">
-      <div class="mb-3 flex items-center gap-2">
-        <span class="badge-secondary">minastro</span>
-        <a href="https://emdashcms.com/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-sm text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <img src="https://emdashcms.com/brand/favicon.svg" alt="EmDash CMS mark" class="size-3.5 shrink-0" />
-          <span>EmDash template</span>
-        </a>
-      </div>
-      <h1 class="text-3xl font-bold tracking-tight text-foreground">A focused home for your work.</h1>
-      <p class="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">Minastro is a quiet, responsive starter for publishing thoughtful posts and showing the projects behind them. EmDash is the source of truth for content, and the complete site deploys directly to Cloudflare.</p>
-    </header>
-
-    <section aria-labelledby="highlighted-features-heading" class="mt-12">
-      <div class="mb-4 max-w-xl">
-        <h2 id="highlighted-features-heading" class="mt-1 text-xl font-semibold tracking-tight">Highlighted features</h2>
-        <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">A practical publishing foundation, already connected from editing through deployment.</p>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <article class="card">
-          <section class="flex gap-3">
-            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"></path><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"></path></svg></span>
-            <div>
-              <h3 class="text-sm font-semibold text-foreground">EmDash-managed content</h3>
-              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">Manage posts, projects, menus, settings, and media without moving content into the codebase.</p>
-            </div>
-          </section>
-        </article>
-        <article class="card">
-          <section class="flex gap-3">
-            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="m17 5-5-3-5 3"></path><path d="m17 19-5 3-5-3"></path><path d="M2 12h20"></path></svg></span>
-            <div>
-              <h3 class="text-sm font-semibold text-foreground">One-command Cloudflare setup</h3>
-              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">Provision the required bindings and deploy with <code class="rounded bg-muted px-1 py-0.5 text-xs text-foreground">bun run cloudflare:setup</code>.</p>
-            </div>
-          </section>
-        </article>
-        <article class="card">
-          <section class="flex gap-3">
-            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path><path d="M5 20a3 3 0 0 1 3-3"></path></svg></span>
-            <div>
-              <h3 class="text-sm font-semibold text-foreground">Search and RSS</h3>
-              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">Built-in search and an RSS feed keep published work easy to find and follow.</p>
-            </div>
-          </section>
-        </article>
-        <article class="card">
-          <section class="flex gap-3">
-            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg></span>
-            <div>
-              <h3 class="text-sm font-semibold text-foreground">Opt-in newsletter</h3>
-              <p class="mt-1 text-sm leading-relaxed text-muted-foreground">Add Turnstile-protected signup and Resend delivery only when the publication needs it.</p>
-            </div>
-          </section>
-        </article>
-      </div>
-    </section>
-
-    <div class="mt-12 grid gap-8 md:grid-cols-2">
-      <section aria-labelledby="latest-writing-heading" class="card flex h-full flex-col">
-        <header>
-          <div class="flex items-baseline justify-between gap-3">
-            <h2 id="latest-writing-heading">Latest writing</h2>
-            <a href="/posts" class="text-xs text-muted-foreground hover:text-foreground">View all</a>
+    {home ? (
+      <>
+        <header class="mb-12 max-w-2xl">
+          <div class="mb-3 flex items-center gap-2">
+            {home.eyebrow && <span class="badge-secondary">{home.eyebrow}</span>}
+            <a href="https://emdashcms.com/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-sm text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <img src="https://emdashcms.com/brand/favicon.svg" alt="EmDash CMS mark" class="size-3.5 shrink-0" />
+              <span>EmDash template</span>
+            </a>
           </div>
-          <p class="mt-1.5">Published posts from EmDash, ordered by date.</p>
+          <h1 class="text-3xl font-bold tracking-tight text-foreground">{home.title}</h1>
+          <p class="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">{home.description}</p>
         </header>
-        <section class="flex-1">
-          {latestPosts.length > 0 ? (
-            <ul class="grid gap-4">
-              {latestPosts.map((post) => (
-                <li>
-                  <a href={`/posts/${post.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    {post.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={post.featuredImage.url} alt={post.featuredImage.alt} loading="lazy" />}
-                    <h3 class="font-medium leading-snug group-hover:underline">{post.title}</h3>
-                    <p class="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{post.description}</p>
-                    <p class="mt-2 text-xs text-muted-foreground">
-                      {post.publishedAt ? formatDate(post.publishedAt) : "Recently"} · {readingTime(extractPlainText(post.content))}
-                    </p>
-                    {post.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{post.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div class="rounded-md border border-dashed border-border px-4 py-6">
-              <p class="font-medium">Featured posts will appear here</p>
-              <p class="mt-1 text-sm text-muted-foreground">Published posts will appear here as they are added in the CMS.</p>
-            </div>
-          )}
-        </section>
-      </section>
 
-      <section aria-labelledby="selected-work-heading" class="card flex h-full flex-col">
-        <header>
-          <div class="flex items-baseline justify-between gap-3">
-            <h2 id="selected-work-heading">Selected work</h2>
-            <a href="/projects" class="text-xs text-muted-foreground hover:text-foreground">View all</a>
+        <section aria-labelledby="highlighted-features-heading" class="mt-12">
+          <div class="mb-4 max-w-xl">
+            <h2 id="highlighted-features-heading" class="mt-1 text-xl font-semibold tracking-tight">{home.highlightsTitle}</h2>
+            {home.highlightsDescription && <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">{home.highlightsDescription}</p>}
           </div>
-          <p class="mt-1.5">Featured projects from EmDash, ordered by date.</p>
-        </header>
-        <section class="flex-1">
-          {selectedProjects.length > 0 ? (
-            <ul class="grid gap-4">
-              {selectedProjects.map((project) => (
-                <li>
-                  <a href={`/projects/${project.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    {project.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={project.featuredImage.url} alt={project.featuredImage.alt} loading="lazy" />}
-                    <div class="flex items-center gap-2">
-                      <h3 class="font-medium leading-snug group-hover:underline">{project.title}</h3>
-                      {project.projectStatus && <span class="badge-outline text-xs">{statusLabel[project.projectStatus] ?? project.projectStatus}</span>}
-                    </div>
-                    <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description}</p>
-                    {project.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{project.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
-                    {(project.github || project.url) && <div class="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      {project.github && <span>GitHub</span>}
-                      {project.url && <span>Live site</span>}
-                    </div>}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div class="rounded-md border border-dashed border-border px-4 py-6">
-              <p class="font-medium">Featured projects will appear here</p>
-              <p class="mt-1 text-sm text-muted-foreground">Mark published work as featured in the CMS to show it on the homepage.</p>
-            </div>
-          )}
+          <div class="grid gap-3 sm:grid-cols-2">
+            {highlights.map((highlight) => (
+              <article class="card">
+                <section class="flex gap-3">
+                  <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true">
+                    <HomeHighlightIcon icon={highlight.icon} />
+                  </span>
+                  <div>
+                    <h3 class="text-sm font-semibold text-foreground">{highlight.title}</h3>
+                    <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{highlight.description}</p>
+                  </div>
+                </section>
+              </article>
+            ))}
+          </div>
         </section>
-      </section>
-    </div>
 
-    <div class="mt-8 flex flex-wrap gap-3">
-      <a href="/newsletter" class="btn">Subscribe to the newsletter</a>
-      <a href="/posts" class="btn-outline">Explore example posts</a>
-    </div>
+        <div class="mt-12 grid gap-8 md:grid-cols-2">
+          <section aria-labelledby="latest-writing-heading" class="card flex h-full flex-col">
+            <header>
+              <div class="flex items-baseline justify-between gap-3">
+                <h2 id="latest-writing-heading">{home.postsTitle}</h2>
+                <a href="/posts" class="text-xs text-muted-foreground hover:text-foreground">View all</a>
+              </div>
+              {home.postsDescription && <p class="mt-1.5">{home.postsDescription}</p>}
+            </header>
+            <section class="flex-1">
+              {latestPosts.length > 0 ? (
+                <ul class="grid gap-4">
+                  {latestPosts.map((post) => (
+                    <li>
+                      <a href={`/posts/${post.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {post.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={post.featuredImage.src} alt={post.featuredImage.alt} loading="lazy" />}
+                        <h3 class="font-medium leading-snug group-hover:underline">{post.title}</h3>
+                        <p class="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{post.description}</p>
+                        <p class="mt-2 text-xs text-muted-foreground">
+                          {post.publishedAt ? formatDate(post.publishedAt) : "Recently"} · {readingTime(extractPlainText(post.content))}
+                        </p>
+                        {post.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{post.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div class="rounded-md border border-dashed border-border px-4 py-6">
+                  <p class="font-medium">Featured posts will appear here</p>
+                  <p class="mt-1 text-sm text-muted-foreground">Published posts will appear here as they are added in the CMS.</p>
+                </div>
+              )}
+            </section>
+          </section>
+
+          <section aria-labelledby="selected-work-heading" class="card flex h-full flex-col">
+            <header>
+              <div class="flex items-baseline justify-between gap-3">
+                <h2 id="selected-work-heading">{home.projectsTitle}</h2>
+                <a href="/projects" class="text-xs text-muted-foreground hover:text-foreground">View all</a>
+              </div>
+              {home.projectsDescription && <p class="mt-1.5">{home.projectsDescription}</p>}
+            </header>
+            <section class="flex-1">
+              {selectedProjects.length > 0 ? (
+                <ul class="grid gap-4">
+                  {selectedProjects.map((project) => (
+                    <li>
+                      <a href={`/projects/${project.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {project.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={project.featuredImage.src} alt={project.featuredImage.alt} loading="lazy" />}
+                        <div class="flex items-center gap-2">
+                          <h3 class="font-medium leading-snug group-hover:underline">{project.title}</h3>
+                          {project.projectStatus && <span class="badge-outline text-xs">{statusLabel[project.projectStatus] ?? project.projectStatus}</span>}
+                        </div>
+                        <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description}</p>
+                        {project.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{project.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
+                        {(project.github || project.url) && <div class="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          {project.github && <span>GitHub</span>}
+                          {project.url && <span>Live site</span>}
+                        </div>}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div class="rounded-md border border-dashed border-border px-4 py-6">
+                  <p class="font-medium">Featured projects will appear here</p>
+                  <p class="mt-1 text-sm text-muted-foreground">Mark published work as featured in the CMS to show it on the homepage.</p>
+                </div>
+              )}
+            </section>
+          </section>
+        </div>
+
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={home.newsletterCtaHref} class="btn">{home.newsletterCtaLabel}</a>
+        </div>
+      </>
+    ) : (
+      <section class="rounded-lg border border-dashed border-border px-5 py-8" aria-labelledby="home-empty-heading">
+        <h1 id="home-empty-heading" class="font-medium">No homepage content published yet</h1>
+        <p class="mt-1 text-sm text-muted-foreground">Homepage content will appear here after the conventional home entry is published in EmDash.</p>
+      </section>
+    )}
   </div>
 </Layout>

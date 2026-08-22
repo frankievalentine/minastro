@@ -10,6 +10,11 @@
     "portfolio",
     "tailwind"
   ],
+  "emdash": {
+    "label": "minastro",
+    "description": "A minimal personal-site theme for EmDash.",
+    "seed": ".emdash/seed.json"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro telemetry disable && astro build",
@@ -21,7 +26,7 @@
     "check": "astro check && eslint .",
     "fix": "eslint --fix .",
     "seed:validate": "bun run scripts/validate-seed.ts",
-    "types:generate": "emdash types",
+    "types:generate": "bun run scripts/generate-types.ts",
     "newsletter:migrate:local": "bunx wrangler d1 migrations apply NEWSLETTER_DB --local",
     "newsletter:migrate:remote": "bunx wrangler d1 migrations apply NEWSLETTER_DB --remote"
   },
