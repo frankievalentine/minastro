@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-
-# Keep the EmDash admin panel out of search indexes
-Disallow: /_emdash/
-
-Sitemap: /sitemap.xml

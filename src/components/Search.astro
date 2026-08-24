@@ -5,7 +5,7 @@
   aria-labelledby="search-dialog-title"
 >
   <div class="command">
-    <header>
+    <header role="search">
       <h2 id="search-dialog-title" class="sr-only">Search posts and projects</h2>
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -22,28 +22,28 @@
       </svg>
       <input
         id="search-input"
-        type="text"
+        type="search"
+        name="q"
         placeholder="Search posts and projects"
         aria-label="Search posts and projects"
         autocomplete="off"
         autocorrect="off"
         spellcheck="false"
-        aria-autocomplete="list"
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="search-menu"
       >
     </header>
     <div
-      role="menu"
-      id="search-menu"
+      id="search-results-panel"
       class="scrollbar"
-      aria-label="Search results"
-      aria-busy="false"
     >
       <p id="search-message" class="px-3 py-8 text-center text-sm text-muted-foreground">
         Start typing to search.
       </p>
+      <ul
+        id="search-results"
+        class="m-0 list-none p-0"
+        aria-label="Search results"
+        aria-busy="false"
+      ></ul>
     </div>
     <p id="search-status" class="sr-only" role="status" aria-live="polite"></p>
   </div>
@@ -52,11 +52,12 @@
 <style is:global>
   @reference "../styles/global.css";
 
-  #search-dialog [role="menu"] {
+  #search-results-panel {
     min-height: 4.5rem;
+    @apply max-h-[300px] overflow-x-hidden overflow-y-auto px-2 py-1;
   }
 
-  #search-dialog [role="menuitem"] {
+  #search-results a {
     @apply h-auto items-start whitespace-normal overflow-visible;
   }
 
@@ -86,7 +87,8 @@
     document.getElementById("search-dialog") as HTMLDialogElement | null;
   const getInput = () =>
     document.getElementById("search-input") as HTMLInputElement | null;
-  const getMenu = () => document.getElementById("search-menu");
+  const getResults = () => document.getElementById("search-results");
+  const getMessage = () => document.getElementById("search-message");
   const getStatus = () => document.getElementById("search-status");
 
   let debounceTimer: number | undefined;
@@ -94,9 +96,12 @@
   let lastTrigger: HTMLElement | null = null;
 
   const setMessage = (message: string) => {
-    const menu = getMenu();
-    if (!menu) return;
-    menu.innerHTML = `<p id="search-message" class="px-3 py-8 text-center text-sm text-muted-foreground">${message}</p>`;
+    const results = getResults();
+    const messageElement = getMessage();
+    if (!results || !messageElement) return;
+    results.replaceChildren();
+    messageElement.textContent = message;
+    messageElement.hidden = false;
   };
 
   const resultUrl = (result: SearchResult) => {
@@ -114,16 +119,19 @@
     })[character] || character);
 
   const renderResults = (items: SearchResult[]) => {
-    const menu = getMenu();
+    const results = getResults();
+    const message = getMessage();
     const status = getStatus();
-    if (!menu) return;
-    if (items.length === 0) {
+    if (!results || !message) return;
+    const visibleItems = items.filter((result) => resultUrl(result));
+    if (visibleItems.length === 0) {
       setMessage("No results found.");
       if (status) status.textContent = "No results found.";
       return;
     }
 
-    menu.innerHTML = items
+    message.hidden = true;
+    results.innerHTML = visibleItems
       .map((result) => {
         const href = resultUrl(result);
         if (!href) return "";
@@ -132,31 +140,31 @@
         const snippet = result.snippet
           ? `<span class="mt-1 line-clamp-2 text-xs text-muted-foreground">${escapeHtml(result.snippet)}</span>`
           : "";
-        return `<a role="menuitem" href="${href}" class="block px-3 py-2.5 outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground">
-          <span class="block truncate text-sm font-medium">${title}</span>
-          <span class="mt-0.5 block text-[0.6875rem] uppercase tracking-wide text-muted-foreground">${collection}</span>
-          ${snippet}
-        </a>`;
+        return `<li><a href="${href}" class="block w-full rounded-sm px-3 py-2.5 outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground">
+            <span class="block truncate text-sm font-medium">${title}</span>
+            <span class="mt-0.5 block text-[0.6875rem] uppercase tracking-wide text-muted-foreground">${collection}</span>
+            ${snippet}
+          </a></li>`;
       })
       .join("");
-    if (status) status.textContent = `${items.length} result${items.length === 1 ? "" : "s"} found.`;
+    if (status) status.textContent = `${visibleItems.length} result${visibleItems.length === 1 ? "" : "s"} found.`;
   };
 
   const search = async (rawQuery: string) => {
     const query = rawQuery.trim();
-    const menu = getMenu();
+    const results = getResults();
     const status = getStatus();
-    if (!menu) return;
+    if (!results) return;
     abortController?.abort();
     if (query.length < 2) {
-      menu.setAttribute("aria-busy", "false");
+      results.setAttribute("aria-busy", "false");
       setMessage(query ? "Keep typing to search." : "Start typing to search.");
       if (status) status.textContent = "";
       return;
     }
 
     abortController = new AbortController();
-    menu.setAttribute("aria-busy", "true");
+    results.setAttribute("aria-busy", "true");
     setMessage("Searching…");
     if (status) status.textContent = "Searching…";
     try {
@@ -175,7 +183,7 @@
       setMessage("Search is temporarily unavailable. Please try again.");
       if (status) status.textContent = "Search is temporarily unavailable.";
     } finally {
-      menu.setAttribute("aria-busy", "false");
+      results.setAttribute("aria-busy", "false");
     }
   };
 

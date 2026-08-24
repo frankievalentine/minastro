@@ -35,7 +35,10 @@ export interface SiteConfig {
 // only presentation values with no EmDash equivalent; there are deliberately
 // no local fallbacks for CMS-owned identity or navigation.
 export const siteConfig: SiteConfig = {
-  url: "https://your-domain.com",
+  // Functional local default: matches the origin used by `bun run cf:dev`
+  // (wrangler dev --local --port 8787), including for local WebAuthn passkeys.
+  // Replace with your canonical HTTPS URL before any production deployment.
+  url: "http://localhost:8787",
   avatar: "/avatar.svg",
   location: "Your City",
   roles: ["Software Engineer", "Open Source", "Builder"],

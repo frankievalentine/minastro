@@ -9,7 +9,7 @@
   },
   "send_metrics": false,
   "triggers": {
-    "crons": ["* * * * *", "*/2 * * * *"]
+    "crons": ["* * * * *"]
   },
   "d1_databases": [
     {

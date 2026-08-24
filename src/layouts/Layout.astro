@@ -252,7 +252,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
   <body class="min-h-svh bg-background text-foreground antialiased">
     {!standalone && <Search />}
 
-    {!standalone && <aside class="sidebar" data-side="left">
+    {!standalone && <aside id="site-sidebar" class="sidebar" data-side="left">
       <nav>
         <section class="scrollbar">
           <!-- Search trigger -->
@@ -489,7 +489,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                 <button
                   id="theme-toggle"
                   type="button"
-                  aria-label="Toggle theme"
+                  aria-label="Switch to dark mode"
                   class="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                 >
                   <svg
@@ -537,15 +537,17 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     </aside>}
 
     <!-- Sibling of .sidebar — gets auto margin from basecoat sidebar CSS -->
-    <div class="flex flex-col min-h-svh">
+    <div id="page-shell" class="flex flex-col min-h-svh">
       <!-- Mobile top bar -->
       {!standalone && <header
         class="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 md:hidden"
       >
         <button
+          id="mobile-sidebar-trigger"
           type="button"
-          onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))"
           aria-label="Open menu"
+          aria-controls="site-sidebar"
+          aria-expanded="false"
           class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent transition-colors"
         >
           <svg
@@ -571,7 +573,9 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     </div>
 
     <script>
-      import "basecoat-css/all";
+      import "basecoat-css/basecoat";
+      import "basecoat-css/popover";
+      import "basecoat-css/sidebar";
       import type { TransitionBeforeSwapEvent } from "astro:transitions/client";
 
       // Transfer the dark class to the incoming document before the swap so the
@@ -586,6 +590,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         window.basecoat?.stop();
         // Release scroll lock before the page swaps out.
         unlockScroll();
+        document.getElementById("page-shell")?.removeAttribute("inert");
       });
 
       // iOS-compatible scroll lock: freeze the body at the current scroll position
@@ -620,23 +625,72 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       // Basecoat initializes itself from DOMContentLoaded on the first load.
       // After a body swap, restore its components and MutationObserver here.
       let sidebarObserver: MutationObserver | null = null;
+      let mobileSidebarWasOpen = false;
+      let restoreSidebarTriggerOnClose = false;
       let firstLoad = true;
+
+      const syncThemeToggle = () => {
+        const themeToggle = document.getElementById("theme-toggle");
+        if (!themeToggle) return;
+        const isDark = document.documentElement.classList.contains("dark");
+        themeToggle.setAttribute(
+          "aria-label",
+          isDark ? "Switch to light mode" : "Switch to dark mode",
+        );
+      };
+
+      const syncMobileSidebar = () => {
+        const sidebar = document.getElementById("site-sidebar");
+        const trigger = document.getElementById("mobile-sidebar-trigger");
+        const pageShell = document.getElementById("page-shell");
+        if (!sidebar || !trigger || !pageShell) return;
+
+        const isMobile = !window.matchMedia("(min-width: 768px)").matches;
+        const isOpen = !sidebar.hasAttribute("inert");
+        const isMobileOpen = isMobile && isOpen;
+
+        trigger.setAttribute("aria-expanded", String(isOpen));
+        trigger.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
+        pageShell.toggleAttribute("inert", isMobileOpen);
+
+        if (isMobileOpen) {
+          lockScroll();
+        } else {
+          unlockScroll();
+          if (mobileSidebarWasOpen && restoreSidebarTriggerOnClose) {
+            const activeElement = document.activeElement;
+            if (
+              !activeElement ||
+              activeElement === document.body ||
+              sidebar.contains(activeElement)
+            ) {
+              trigger.focus();
+            }
+          }
+          restoreSidebarTriggerOnClose = false;
+        }
+
+        mobileSidebarWasOpen = isMobileOpen;
+      };
 
       const reconcileSidebar = () => {
         const isDesktop = window.matchMedia("(min-width: 768px)").matches;
 
         // Let Basecoat update its own state when the viewport crosses the
         // breakpoint, rather than changing inert/aria-hidden behind its back.
-        if (document.querySelector(".sidebar")) {
+        const sidebar = document.getElementById("site-sidebar");
+        if (sidebar) {
           document.dispatchEvent(
             new CustomEvent("basecoat:sidebar", {
-              detail: { action: isDesktop ? "open" : "close" },
+              detail: {
+                id: sidebar.id,
+                action: isDesktop ? "open" : "close",
+              },
             }),
           );
         }
 
-        // Reconciliation must always release a stale mobile overlay lock.
-        unlockScroll();
+        syncMobileSidebar();
       };
 
       const initPage = () => {
@@ -647,26 +701,16 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
           window.basecoat?.start();
         }
 
-        // Set up the mobile sidebar scroll-lock observer.
-        // astro:before-swap always stops Basecoat and unlocks before navigation,
-        // so we only need to observe future inert changes — no initial sync needed.
-        // The lock only applies on mobile where the sidebar is a full-screen overlay;
-        // on desktop the sidebar is always visible and inert is never toggled.
+        syncThemeToggle();
+
+        // Keep the mobile drawer's Basecoat state aligned with its trigger,
+        // background inertness, focus restoration, and scroll lock.
         sidebarObserver?.disconnect();
-        const sidebar = document.querySelector(".sidebar");
+        mobileSidebarWasOpen = false;
+        restoreSidebarTriggerOnClose = false;
+        const sidebar = document.getElementById("site-sidebar");
         if (sidebar) {
-          const isMobile = () =>
-            !window.matchMedia("(min-width: 768px)").matches;
-          sidebarObserver = new MutationObserver(() => {
-            if (!isMobile()) {
-              return;
-            }
-            if (sidebar.hasAttribute("inert")) {
-              unlockScroll();
-            } else {
-              lockScroll();
-            }
-          });
+          sidebarObserver = new MutationObserver(syncMobileSidebar);
           sidebarObserver.observe(sidebar, {
             attributes: true,
             attributeFilter: ["inert"],
@@ -710,6 +754,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         if (target.closest("#theme-toggle")) {
           const isDark = !document.documentElement.classList.contains("dark");
           document.documentElement.classList.toggle("dark", isDark);
+          syncThemeToggle();
           try {
             localStorage.setItem("theme", isDark ? "dark" : "light");
           } catch {
@@ -717,12 +762,42 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
           }
         }
 
-        if (target.closest("#search-trigger")) {
-          (
-            document.getElementById("search-dialog") as HTMLDialogElement
-          )?.showModal();
-          document.getElementById("search-input")?.focus();
+        if (target.closest("#mobile-sidebar-trigger")) {
+          const sidebar = document.getElementById("site-sidebar");
+          if (!sidebar) return;
+          restoreSidebarTriggerOnClose = true;
+          document.dispatchEvent(
+            new CustomEvent("basecoat:sidebar", {
+              detail: { id: sidebar.id, action: "open" },
+            }),
+          );
+          syncMobileSidebar();
+          const firstControl = sidebar.querySelector<HTMLElement>(
+            'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          );
+          firstControl?.focus();
         }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const sidebar = document.getElementById("site-sidebar");
+        if (
+          !sidebar ||
+          window.matchMedia("(min-width: 768px)").matches ||
+          sidebar.hasAttribute("inert")
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        restoreSidebarTriggerOnClose = true;
+        document.dispatchEvent(
+          new CustomEvent("basecoat:sidebar", {
+            detail: { id: sidebar.id, action: "close" },
+          }),
+        );
+        syncMobileSidebar();
       });
 
       const copyText = async (text: string) => {
