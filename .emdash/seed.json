@@ -23,9 +23,9 @@
       "urlPattern": "/posts/{slug}",
       "commentsEnabled": true,
       "fields": [
-        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "title", "label": "Title", "type": "string", "required": true, "searchable": true },
         { "slug": "description", "label": "Description", "type": "text", "required": true },
-        { "slug": "content", "label": "Content", "type": "portableText" },
+        { "slug": "content", "label": "Content", "type": "portableText", "searchable": true },
         { "slug": "featured", "label": "Featured", "type": "boolean" },
         { "slug": "featured_image", "label": "Featured image", "type": "image" }
       ]
@@ -39,9 +39,9 @@
       "supports": ["drafts", "revisions", "preview", "scheduling", "search", "seo"],
       "urlPattern": "/projects/{slug}",
       "fields": [
-        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "title", "label": "Title", "type": "string", "required": true, "searchable": true },
         { "slug": "description", "label": "Description", "type": "text", "required": true },
-        { "slug": "content", "label": "Content", "type": "portableText" },
+        { "slug": "content", "label": "Content", "type": "portableText", "searchable": true },
         { "slug": "project_status", "label": "Project status", "type": "string" },
         { "slug": "url", "label": "URL", "type": "url" },
         { "slug": "github", "label": "GitHub", "type": "url" },
@@ -99,6 +99,55 @@
       ]
     },
     {
+      "slug": "listing_headers",
+      "label": "Listing Headers",
+      "labelSingular": "Listing Header",
+      "description": "Optional singleton override for the Posts and Projects eyebrow labels and icons. Edit only the seeded listing-headers record; page titles and descriptions remain theme-owned.",
+      "icon": "settings",
+      "supports": ["drafts", "revisions"],
+      "fields": [
+        { "slug": "posts_label", "label": "Posts label", "type": "string" },
+        { "slug": "posts_icon", "label": "Posts icon", "type": "select", "validation": { "options": ["posts", "projects", "book", "briefcase", "file", "folder", "code", "lightbulb"] } },
+        { "slug": "projects_label", "label": "Projects label", "type": "string" },
+        { "slug": "projects_icon", "label": "Projects icon", "type": "select", "validation": { "options": ["posts", "projects", "book", "briefcase", "file", "folder", "code", "lightbulb"] } }
+      ]
+    },
+    {
+      "slug": "newsletter_page",
+      "label": "Newsletter Page",
+      "labelSingular": "Newsletter Page",
+      "description": "Optional singleton editorial override for the public newsletter page. Edit only the seeded newsletter record; when it is absent or unpublished, the theme uses its complete local default. Operational delivery and security settings remain outside the CMS.",
+      "icon": "mail",
+      "supports": ["drafts", "revisions"],
+      "fields": [
+        { "slug": "eyebrow", "label": "Eyebrow", "type": "string" },
+        { "slug": "title", "label": "Title", "type": "string", "required": true },
+        { "slug": "description", "label": "Introduction", "type": "text", "required": true },
+        { "slug": "signup_title", "label": "Signup heading", "type": "string", "required": true },
+        { "slug": "signup_description", "label": "Signup description", "type": "text", "required": true },
+        { "slug": "name_label", "label": "Name label", "type": "string", "required": true },
+        { "slug": "name_optional_label", "label": "Name optional label", "type": "string" },
+        { "slug": "name_placeholder", "label": "Name placeholder", "type": "string" },
+        { "slug": "email_label", "label": "Email label", "type": "string", "required": true },
+        { "slug": "email_placeholder", "label": "Email placeholder", "type": "string" },
+        { "slug": "email_help", "label": "Email help", "type": "text" },
+        { "slug": "submit_label", "label": "Submit label", "type": "string", "required": true },
+        { "slug": "submitting_label", "label": "Submitting label", "type": "string", "required": true },
+        { "slug": "consent_copy", "label": "Consent and disclaimer", "type": "text", "required": true },
+        { "slug": "success_title", "label": "Success heading", "type": "string", "required": true },
+        { "slug": "success_message", "label": "Success message", "type": "text", "required": true },
+        { "slug": "disabled_heading", "label": "Disabled-state heading", "type": "string", "required": true },
+        { "slug": "disabled_body", "label": "Disabled-state body", "type": "text", "required": true },
+        { "slug": "expectations_title", "label": "Expectations heading", "type": "string", "required": true },
+        { "slug": "expectation_one_title", "label": "First expectation title", "type": "string", "required": true },
+        { "slug": "expectation_one_description", "label": "First expectation description", "type": "text", "required": true },
+        { "slug": "expectation_two_title", "label": "Second expectation title", "type": "string", "required": true },
+        { "slug": "expectation_two_description", "label": "Second expectation description", "type": "text", "required": true },
+        { "slug": "expectation_three_title", "label": "Third expectation title", "type": "string", "required": true },
+        { "slug": "expectation_three_description", "label": "Third expectation description", "type": "text", "required": true }
+      ]
+    },
+    {
       "slug": "navigation_icons",
       "label": "Navigation Icons",
       "labelSingular": "Navigation Icon",
@@ -133,31 +182,77 @@
     }
   ],
   "content": {
+    "newsletter_page": [
+      {
+        "id": "newsletter",
+        "slug": "newsletter",
+        "status": "published",
+        "data": {
+          "eyebrow": "Newsletter",
+          "title": "Stay in the loop",
+          "description": "Occasional notes on engineering, projects, and ideas. No spam.",
+          "signup_title": "Subscribe for new notes",
+          "signup_description": "Get new writing and project updates in your inbox when there is something useful to share.",
+          "name_label": "Name",
+          "name_optional_label": "(optional)",
+          "name_placeholder": "Your name",
+          "email_label": "Email address",
+          "email_placeholder": "you@example.com",
+          "email_help": "You can unsubscribe from any email.",
+          "submit_label": "Subscribe",
+          "submitting_label": "Subscribing…",
+          "consent_copy": "By subscribing, you consent to receive this newsletter. Your email is used only for newsletter communications and can be removed at any time.",
+          "success_title": "Check your inbox",
+          "success_message": "If this address can be subscribed, you will receive a confirmation email shortly. Use the link there to finish subscribing.",
+          "disabled_heading": "Newsletter coming soon",
+          "disabled_body": "Signup is not open yet. Check back here for future updates.",
+          "expectations_title": "What to expect",
+          "expectation_one_title": "Engineering notes",
+          "expectation_one_description": "Practical notes on building, debugging, and maintaining software.",
+          "expectation_two_title": "Project updates",
+          "expectation_two_description": "Short updates on open-source work, experiments, and useful tools.",
+          "expectation_three_title": "A focused pace",
+          "expectation_three_description": "Occasional delivery, only when there is something worth sending."
+        }
+      }
+    ],
+    "listing_headers": [
+      {
+        "id": "listing-headers",
+        "slug": "listing-headers",
+        "status": "published",
+        "data": {
+          "posts_label": "Writing",
+          "posts_icon": "posts",
+          "projects_label": "Work",
+          "projects_icon": "projects"
+        }
+      }
+    ],
     "home": [
       {
         "id": "home",
         "slug": "home",
         "status": "published",
         "data": {
-          "eyebrow": "minastro",
-          "title": "A focused home for your work.",
-          "description": "Minastro is a quiet, responsive starter for publishing thoughtful posts and showing the projects behind them. EmDash is the source of truth for content, and the complete site deploys directly to Cloudflare.",
-          "highlights_title": "Highlighted features",
-          "highlights_description": "A practical publishing foundation, already connected from editing through deployment.",
+          "title": "A focused home for thoughtful work.",
+          "description": "A personal space for considered writing, current projects, and the lessons gathered along the way.",
+          "highlights_title": "What you'll find here",
+          "highlights_description": "A growing collection of notes, experiments, and useful work.",
           "posts_title": "Latest writing",
-          "posts_description": "Published posts from EmDash, ordered by date.",
+          "posts_description": "Recent notes and essays, ordered by date.",
           "projects_title": "Selected work",
-          "projects_description": "Featured projects from EmDash, ordered by date.",
+          "projects_description": "A selection of current and completed projects.",
           "newsletter_cta_label": "Subscribe to the newsletter",
           "newsletter_cta_href": "/newsletter"
         }
       }
     ],
     "home_highlights": [
-      { "id": "home-highlight-content", "slug": "emdash-managed-content", "status": "published", "data": { "title": "EmDash-managed content", "description": "Manage posts, projects, menus, settings, and media without moving content into the codebase.", "icon_key": "database", "sort_order": 1 } },
-      { "id": "home-highlight-cloudflare", "slug": "one-command-cloudflare-setup", "status": "published", "data": { "title": "One-command Cloudflare setup", "description": "Provision the required bindings and deploy with bun run cloudflare:setup.", "icon_key": "workflow", "sort_order": 2 } },
-      { "id": "home-highlight-discovery", "slug": "search-and-rss", "status": "published", "data": { "title": "Search and RSS", "description": "Built-in search and an RSS feed keep published work easy to find and follow.", "icon_key": "search", "sort_order": 3 } },
-      { "id": "home-highlight-newsletter", "slug": "opt-in-newsletter", "status": "published", "data": { "title": "Opt-in newsletter", "description": "Add Turnstile-protected signup and Resend delivery only when the publication needs it.", "icon_key": "mail", "sort_order": 4 } }
+      { "id": "home-highlight-content", "slug": "collected-notes", "status": "published", "data": { "title": "Collected notes", "description": "Essays and shorter observations about what is being learned, built, and reconsidered.", "icon_key": "database", "sort_order": 1 } },
+      { "id": "home-highlight-cloudflare", "slug": "work-in-progress", "status": "published", "data": { "title": "Work in progress", "description": "Projects capture both finished outcomes and the thinking that shaped them.", "icon_key": "workflow", "sort_order": 2 } },
+      { "id": "home-highlight-discovery", "slug": "easy-to-explore", "status": "published", "data": { "title": "Easy to explore", "description": "Search and an RSS feed make published work straightforward to find and follow.", "icon_key": "search", "sort_order": 3 } },
+      { "id": "home-highlight-newsletter", "slug": "occasional-updates", "status": "published", "data": { "title": "Occasional updates", "description": "A quiet newsletter shares new writing only when there is something useful to send.", "icon_key": "mail", "sort_order": 4 } }
     ],
     "posts": [
       {
@@ -297,8 +392,6 @@
           "title": "Personal site",
           "description": "A focused home for writing, projects, and an evolving body of work.",
           "project_status": "active",
-          "url": "https://your-domain.com",
-          "github": "https://github.com/yourusername/minastro",
           "featured": true,
           "content": [
             {

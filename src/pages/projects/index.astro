@@ -1,14 +1,32 @@
 ---
 import { getEmDashCollection } from "emdash";
+import ListingHeaderMeta from "../../components/ListingHeaderMeta.astro";
 import Layout from "../../layouts/Layout.astro";
 
-const { entries: projects, error } = await getEmDashCollection("projects", {
-  status: "published",
-});
+const [projectsResult, listingHeadersResult] = await Promise.all([
+  getEmDashCollection("projects", { status: "published" }),
+  getEmDashCollection("listing_headers", { status: "published" }),
+]);
+
+const { entries: projects, error } = projectsResult;
 
 if (error) {
   throw error;
 }
+
+if (listingHeadersResult.error) {
+  throw listingHeadersResult.error;
+}
+
+const listingHeader = listingHeadersResult.entries.find(({ id, data }) =>
+  id === "listing-headers" || data.slug === "listing-headers" || data.id === "listing-headers"
+)?.data;
+const projectsHeader = listingHeader
+  ? {
+      label: typeof listingHeader.projects_label === "string" ? listingHeader.projects_label : undefined,
+      icon: typeof listingHeader.projects_icon === "string" ? listingHeader.projects_icon : undefined,
+    }
+  : { label: "Work", icon: "projects" };
 
 const sortedProjects = (projects ?? []).sort((a, b) => {
   const aDate = a.data.publishedAt;
@@ -47,31 +65,7 @@ const featuredImage = (value: unknown, alt: string) => {
 
 <Layout title="Projects" currentPage="/projects">
   <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
-    <!-- Page header -->
-    <div class="flex items-center gap-2 mb-3">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="text-muted-foreground"
-        aria-hidden="true"
-      >
-        <path d="M3 3h7v7H3z"></path>
-        <path d="M14 3h7v7h-7z"></path>
-        <path d="M14 14h7v7h-7z"></path>
-        <path d="M3 14h7v7H3z"></path>
-      </svg>
-      <span
-        class="text-xs text-muted-foreground font-medium uppercase tracking-wider"
-        >Work</span
-      >
-    </div>
+    <ListingHeaderMeta label={projectsHeader.label} icon={projectsHeader.icon} />
     <h1 class="text-3xl font-bold tracking-tight mb-2">Projects</h1>
     <p class="text-muted-foreground text-sm mb-10">
       Things I've built, am building, or have shipped.
@@ -79,7 +73,7 @@ const featuredImage = (value: unknown, alt: string) => {
 
     <section aria-labelledby="published-projects-heading">
       <div class="mb-4">
-        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Published in EmDash</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Portfolio</p>
         <h2 id="published-projects-heading" class="mt-1 text-xl font-semibold tracking-tight">Latest projects</h2>
       </div>
       {sortedProjects.length > 0 ? (
@@ -109,7 +103,7 @@ const featuredImage = (value: unknown, alt: string) => {
       ) : (
         <div class="rounded-lg border border-dashed border-border px-5 py-8">
           <h3 class="font-medium">No projects published yet</h3>
-          <p class="mt-1 text-sm text-muted-foreground">New projects will appear here after they are published in the EmDash Projects collection.</p>
+          <p class="mt-1 text-sm text-muted-foreground">New projects will appear here when they are published.</p>
         </div>
       )}
     </section>

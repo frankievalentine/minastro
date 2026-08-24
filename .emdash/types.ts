@@ -89,6 +89,57 @@ export interface HomeHighlight {
   terms?: Record<string, TaxonomyTerm[]>;
 }
 
+export interface ListingHeader {
+  id: string;
+  slug: string | null;
+  status: string;
+  posts_label?: string;
+  posts_icon?: "posts" | "projects" | "book" | "briefcase" | "file" | "folder" | "code" | "lightbulb";
+  projects_label?: string;
+  projects_icon?: "posts" | "projects" | "book" | "briefcase" | "file" | "folder" | "code" | "lightbulb";
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
+export interface NewsletterPage {
+  id: string;
+  slug: string | null;
+  status: string;
+  eyebrow?: string;
+  title: string;
+  description: string;
+  signup_title: string;
+  signup_description: string;
+  name_label: string;
+  name_optional_label?: string;
+  name_placeholder?: string;
+  email_label: string;
+  email_placeholder?: string;
+  email_help?: string;
+  submit_label: string;
+  submitting_label: string;
+  consent_copy: string;
+  success_title: string;
+  success_message: string;
+  disabled_heading: string;
+  disabled_body: string;
+  expectations_title: string;
+  expectation_one_title: string;
+  expectation_one_description: string;
+  expectation_two_title: string;
+  expectation_two_description: string;
+  expectation_three_title: string;
+  expectation_three_description: string;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt: Date | null;
+  bylines?: ContentBylineCredit[];
+  terms?: Record<string, TaxonomyTerm[]>;
+}
+
 export interface NavigationIcon {
   id: string;
   slug: string | null;

@@ -19,7 +19,9 @@
 import type {
   Home,
   HomeHighlight,
+  ListingHeader,
   NavigationIcon,
+  NewsletterPage,
   Page,
   Post,
   Project,
@@ -37,6 +39,8 @@ declare module "emdash" {
     pages: Page;
     home: Home;
     home_highlights: HomeHighlight;
+    listing_headers: ListingHeader;
+    newsletter_page: NewsletterPage;
     navigation_icons: NavigationIcon;
   }
 }

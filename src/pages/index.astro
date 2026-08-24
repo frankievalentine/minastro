@@ -2,10 +2,11 @@
 import { getEmDashCollection, extractPlainText, type PortableTextBlock } from "emdash";
 import HomeHighlightIcon from "../components/HomeHighlightIcon.astro";
 import Layout from "../layouts/Layout.astro";
+import { siteConfig } from "../site.config";
 import { formatDate, readingTime } from "../utils";
 type FeaturedImage = { src: string; alt: string };
 type HomepagePost = { title: string; slug: string; description: string; publishedAt: Date | null; content: PortableTextBlock[]; tags: string[]; featuredImage?: FeaturedImage };
-type HomepageProject = { title: string; slug: string; description: string; publishedAt: Date | null; featured: boolean; projectStatus: string | undefined; github?: string; url?: string; tags: string[]; featuredImage?: FeaturedImage };
+type HomepageProject = { title: string; slug: string; description: string; publishedAt: Date | null; featured: boolean; project_status: string | undefined; tags: string[]; featuredImage?: FeaturedImage };
 type HighlightIcon = "database" | "workflow" | "search" | "mail";
 
 const highlightIcons = new Set<HighlightIcon>(["database", "workflow", "search", "mail"]);
@@ -113,9 +114,7 @@ const projects: HomepageProject[] = projectsResult.entries.map((project) => ({
   description: project.data.description,
   publishedAt: toDate(project.data.publishedAt),
   featured: project.data.featured ?? false,
-  projectStatus: (project.data as { projectStatus?: string; project_status?: string }).projectStatus ?? (project.data as { project_status?: string }).project_status,
-  github: project.data.github,
-  url: project.data.url,
+  project_status: project.data.project_status,
   tags: (project.data.terms?.tag ?? []).map((tag) => tag.label ?? tag.name),
   featuredImage: toFeaturedImage(project.data.featured_image, project.data.title),
 }));
@@ -130,18 +129,16 @@ const selectedProjects = projects
 const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", archived: "Archived" };
 ---
 
-<Layout title="About" currentPage="/">
+<Layout title={home?.title ?? "Home"} description={home?.description} currentPage="/">
   <div class="mx-auto max-w-3xl px-6 py-12 md:py-16">
     {home ? (
       <>
         <header class="mb-12 max-w-2xl">
-          <div class="mb-3 flex items-center gap-2">
-            {home.eyebrow && <span class="badge-secondary">{home.eyebrow}</span>}
-            <a href="https://emdashcms.com/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 rounded-sm text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <img src="https://emdashcms.com/brand/favicon.svg" alt="EmDash CMS mark" class="size-3.5 shrink-0" />
-              <span>EmDash template</span>
-            </a>
-          </div>
+          {home.eyebrow && (
+            <div class="mb-3">
+              <span class="badge-secondary">{home.eyebrow}</span>
+            </div>
+          )}
           <h1 class="text-3xl font-bold tracking-tight text-foreground">{home.title}</h1>
           <p class="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">{home.description}</p>
         </header>
@@ -196,8 +193,8 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                 </ul>
               ) : (
                 <div class="rounded-md border border-dashed border-border px-4 py-6">
-                  <p class="font-medium">Featured posts will appear here</p>
-                  <p class="mt-1 text-sm text-muted-foreground">Published posts will appear here as they are added in the CMS.</p>
+                  <p class="font-medium">Latest posts will appear here</p>
+                  <p class="mt-1 text-sm text-muted-foreground">New writing will appear here when it is published.</p>
                 </div>
               )}
             </section>
@@ -220,14 +217,10 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                         {project.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={project.featuredImage.src} alt={project.featuredImage.alt} loading="lazy" />}
                         <div class="flex items-center gap-2">
                           <h3 class="font-medium leading-snug group-hover:underline">{project.title}</h3>
-                          {project.projectStatus && <span class="badge-outline text-xs">{statusLabel[project.projectStatus] ?? project.projectStatus}</span>}
+                          {project.project_status && <span class="badge-outline text-xs">{statusLabel[project.project_status] ?? project.project_status}</span>}
                         </div>
                         <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description}</p>
                         {project.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{project.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
-                        {(project.github || project.url) && <div class="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          {project.github && <span>GitHub</span>}
-                          {project.url && <span>Live site</span>}
-                        </div>}
                       </a>
                     </li>
                   ))}
@@ -235,21 +228,23 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
               ) : (
                 <div class="rounded-md border border-dashed border-border px-4 py-6">
                   <p class="font-medium">Featured projects will appear here</p>
-                  <p class="mt-1 text-sm text-muted-foreground">Mark published work as featured in the CMS to show it on the homepage.</p>
+                  <p class="mt-1 text-sm text-muted-foreground">Selected work will appear here as projects are published.</p>
                 </div>
               )}
             </section>
           </section>
         </div>
 
-        <div class="mt-8 flex flex-wrap gap-3">
-          <a href={home.newsletterCtaHref} class="btn">{home.newsletterCtaLabel}</a>
-        </div>
+        {siteConfig.newsletter.enabled && (
+          <div class="mt-8 flex flex-wrap gap-3">
+            <a href={home.newsletterCtaHref} class="btn">{home.newsletterCtaLabel}</a>
+          </div>
+        )}
       </>
     ) : (
       <section class="rounded-lg border border-dashed border-border px-5 py-8" aria-labelledby="home-empty-heading">
-        <h1 id="home-empty-heading" class="font-medium">No homepage content published yet</h1>
-        <p class="mt-1 text-sm text-muted-foreground">Homepage content will appear here after the conventional home entry is published in EmDash.</p>
+        <h1 id="home-empty-heading" class="font-medium">Homepage content is not available yet</h1>
+        <p class="mt-1 text-sm text-muted-foreground">Please check back soon.</p>
       </section>
     )}
   </div>

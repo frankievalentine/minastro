@@ -1,5 +1,6 @@
 ---
 import { getEmDashCollection, getSiteSettings, extractPlainText } from "emdash";
+import ListingHeaderMeta from "../../components/ListingHeaderMeta.astro";
 import Layout from "../../layouts/Layout.astro";
 import { formatDate, readingTime } from "../../utils";
 
@@ -27,16 +28,35 @@ const page =
     ? parsedPage
     : 1;
 
-const { entries: posts, error, hasMore } = await getEmDashCollection("posts", {
-  status: "published",
-  limit: perPage,
-  offset: (page - 1) * perPage,
-  orderBy: { published_at: "desc" },
-});
+const [postsResult, listingHeadersResult] = await Promise.all([
+  getEmDashCollection("posts", {
+    status: "published",
+    limit: perPage,
+    offset: (page - 1) * perPage,
+    orderBy: { published_at: "desc" },
+  }),
+  getEmDashCollection("listing_headers", { status: "published" }),
+]);
+
+const { entries: posts, error, hasMore } = postsResult;
 
 if (error) {
   throw error;
 }
+
+if (listingHeadersResult.error) {
+  throw listingHeadersResult.error;
+}
+
+const listingHeader = listingHeadersResult.entries.find(({ id, data }) =>
+  id === "listing-headers" || data.slug === "listing-headers" || data.id === "listing-headers"
+)?.data;
+const postsHeader = listingHeader
+  ? {
+      label: typeof listingHeader.posts_label === "string" ? listingHeader.posts_label : undefined,
+      icon: typeof listingHeader.posts_icon === "string" ? listingHeader.posts_icon : undefined,
+    }
+  : { label: "Writing", icon: "posts" };
 
 const featuredImage = (value: unknown, alt: string) => {
   if (typeof value !== "object" || value === null) return undefined;
@@ -48,40 +68,15 @@ const featuredImage = (value: unknown, alt: string) => {
 
 <Layout title="Posts" currentPage="/posts">
   <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
-    <!-- Page header -->
-    <div class="flex items-center gap-2 mb-3">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="text-muted-foreground"
-        aria-hidden="true"
-      >
-        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-        <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-        <path d="M10 9H8" />
-        <path d="M16 13H8" />
-        <path d="M16 17H8" />
-      </svg>
-      <span
-        class="text-xs text-muted-foreground font-medium uppercase tracking-wider"
-        >Writing</span
-      >
-    </div>
+    <ListingHeaderMeta label={postsHeader.label} icon={postsHeader.icon} />
     <h1 class="text-3xl font-bold tracking-tight mb-2">Posts</h1>
     <p class="text-muted-foreground text-sm mb-10">
-      Writing on engineering, projects, and ideas worth sharing.
+      Notes on engineering, projects, and ideas worth sharing.
     </p>
 
     <section aria-labelledby="published-posts-heading">
       <div class="mb-4">
-        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Published in EmDash</p>
+        <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Archive</p>
         <h2 id="published-posts-heading" class="mt-1 text-xl font-semibold tracking-tight">Latest posts</h2>
       </div>
       {posts.length > 0 ? (
@@ -115,7 +110,7 @@ const featuredImage = (value: unknown, alt: string) => {
           <p class="mt-1 text-sm text-muted-foreground">
             {page > 1
               ? "Use Previous to return to a page with published posts."
-              : "New posts will appear here after they are published in the EmDash Posts collection."}
+              : "New posts will appear here when they are published."}
           </p>
         </div>
       )}

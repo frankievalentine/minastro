@@ -305,6 +305,259 @@
       ]
     },
     {
+      "slug": "listing_headers",
+      "label": "Listing Headers",
+      "labelSingular": "Listing Header",
+      "description": "Optional singleton override for the Posts and Projects eyebrow labels and icons. Edit only the seeded listing-headers record; page titles and descriptions remain theme-owned.",
+      "icon": "settings",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "fields": [
+        {
+          "slug": "posts_label",
+          "label": "Posts label",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "posts_icon",
+          "label": "Posts icon",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "posts",
+              "projects",
+              "book",
+              "briefcase",
+              "file",
+              "folder",
+              "code",
+              "lightbulb"
+            ]
+          }
+        },
+        {
+          "slug": "projects_label",
+          "label": "Projects label",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "projects_icon",
+          "label": "Projects icon",
+          "type": "select",
+          "required": false,
+          "unique": false,
+          "validation": {
+            "options": [
+              "posts",
+              "projects",
+              "book",
+              "briefcase",
+              "file",
+              "folder",
+              "code",
+              "lightbulb"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "slug": "newsletter_page",
+      "label": "Newsletter Page",
+      "labelSingular": "Newsletter Page",
+      "description": "Optional singleton editorial override for the public newsletter page. Edit only the seeded newsletter record; when it is absent or unpublished, the theme uses its complete local default. Operational delivery and security settings remain outside the CMS.",
+      "icon": "mail",
+      "supports": [
+        "drafts",
+        "revisions"
+      ],
+      "fields": [
+        {
+          "slug": "eyebrow",
+          "label": "Eyebrow",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "description",
+          "label": "Introduction",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "signup_title",
+          "label": "Signup heading",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "signup_description",
+          "label": "Signup description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "name_label",
+          "label": "Name label",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "name_optional_label",
+          "label": "Name optional label",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "name_placeholder",
+          "label": "Name placeholder",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "email_label",
+          "label": "Email label",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "email_placeholder",
+          "label": "Email placeholder",
+          "type": "string",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "email_help",
+          "label": "Email help",
+          "type": "text",
+          "required": false,
+          "unique": false
+        },
+        {
+          "slug": "submit_label",
+          "label": "Submit label",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "submitting_label",
+          "label": "Submitting label",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "consent_copy",
+          "label": "Consent and disclaimer",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "success_title",
+          "label": "Success heading",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "success_message",
+          "label": "Success message",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "disabled_heading",
+          "label": "Disabled-state heading",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "disabled_body",
+          "label": "Disabled-state body",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectations_title",
+          "label": "Expectations heading",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_one_title",
+          "label": "First expectation title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_one_description",
+          "label": "First expectation description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_two_title",
+          "label": "Second expectation title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_two_description",
+          "label": "Second expectation description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_three_title",
+          "label": "Third expectation title",
+          "type": "string",
+          "required": true,
+          "unique": false
+        },
+        {
+          "slug": "expectation_three_description",
+          "label": "Third expectation description",
+          "type": "text",
+          "required": true,
+          "unique": false
+        }
+      ]
+    },
+    {
       "slug": "navigation_icons",
       "label": "Navigation Icons",
       "labelSingular": "Navigation Icon",
@@ -357,5 +610,5 @@
       ]
     }
   ],
-  "version": "2a30459833443175"
+  "version": "a9fbab36472d72d5"
 }
