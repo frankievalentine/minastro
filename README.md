@@ -19,7 +19,54 @@ scope. Never commit PATs or project-wide write/admin credentials to this
 repository. Verify the endpoint is available after deployment before relying
 on it.
 
-### Agent-guided setup
+### Local development (no Cloudflare account required)
+
+A fresh clone runs entirely locally with no Cloudflare account, no domain, and
+no provisioning:
+
+```bash
+git clone https://github.com/frankievalentine/minastro.git
+cd minastro
+bun install
+bun run cf:dev
+```
+
+`cf:dev` builds the Astro SSR output and then runs `wrangler dev --local
+--port 8787`, so the D1, R2, and KV bindings EmDash needs are simulated
+locally. The committed `siteConfig.url` is `http://localhost:8787`, which
+exactly matches this origin — including for local WebAuthn passkeys. Open
+`http://localhost:8787` and complete the one-time EmDash setup at
+`/_emdash/admin/setup`.
+
+- Simulated bindings persist in `.wrangler/state`, so your local content
+  survives restarts.
+- To reset local state, delete **only** the `.wrangler/state` directory; the
+  next `bun run cf:dev` starts from an empty database and re-applies the seed.
+- Passkeys you register on localhost are bound to that origin and do not work
+  in production. Register the production passkey later on your final deployed
+  hostname.
+- On the first setup screen you choose whether to include sample content:
+  both choices are fully supported. Keeping it demonstrates posts, projects,
+  and pages; clearing **Include sample content (recommended for new sites)**
+  gives you a clean site while retaining the schema, settings, and navigation.
+
+`bun run dev` is Astro-only and is useful for frontend work, but it does not
+provide the D1, R2, or Workers bindings required by EmDash.
+
+### Deploying to Cloudflare (optional)
+
+Deployment is a separate step owned by you, the clone user. Nothing in this
+repository provisions on your behalf until you run it. You can develop locally
+indefinitely without ever doing this. Installing the theme attaches no domain
+and performs no deployment; the committed `siteConfig.url` stays on
+`http://localhost:8787` until you deliberately deploy.
+
+Before any production deployment, replace `src/site.config.ts`'s
+`siteConfig.url` with your canonical HTTPS URL (for example,
+`https://example.com`). The localhost default is functional for local
+development only and must not serve production.
+
+#### Agent-guided setup
 
 Open a coding agent in this clone and paste the following prompt:
 
@@ -41,10 +88,11 @@ review any Wrangler conflict prompt rather than bypassing it. Skip the optional
 newsletter unless I explicitly provide its Email Sending, Turnstile, and Rate
 Limiting prerequisites. Do not expose or commit secrets. Once deployed, verify
 the final HTTPS origin responds, then guide me through /_emdash/admin/setup at
-that origin only. On the first EmDash setup screen, uncheck “Include sample
-content (recommended for new sites)” before continuing, then smoke-test the
-public site and CMS routes. Never register the production passkey on a
-workers.dev origin.
+that origin only. On the first EmDash setup screen, ask me whether to include
+sample content — both including and clearing “Include sample content
+(recommended for new sites)” are supported — and apply my choice before
+continuing, then smoke-test the public site and CMS routes. Never register the
+production passkey on a workers.dev origin.
 ```
 
 Setup cannot automate everything. You remain responsible for authenticating
@@ -54,7 +102,7 @@ and supplying any optional newsletter or third-party credentials. Registrar
 transfers and DNS hosted outside Cloudflare are outside what this repository
 automates.
 
-### Manual setup
+### Manual deployment setup
 
 ```bash
 git clone https://github.com/frankievalentine/minastro.git
@@ -96,16 +144,9 @@ testing; it should never receive the production passkey.
 Minastro’s seed includes optional example posts, projects, and a page. EmDash
 checks **Include sample content (recommended for new sites)** by default; clear
 that checkbox on the first setup screen to create a clean site while retaining
-the schema, settings, and navigation.
-
-For Worker-compatible local development **after bindings are configured**:
-
-```bash
-bun run cf:dev
-```
-
-`bun run dev` is Astro-only and is useful for frontend work, but it does not
-guarantee the D1, R2, or Workers bindings required by EmDash.
+the schema, settings, and navigation. Both choices are supported; see
+[Local development](#local-development-no-cloudflare-account-required) for the
+same choice on localhost.
 
 Deploy later changes with:
 
@@ -122,6 +163,9 @@ EmDash is the runtime source of truth. It owns:
   IANA timezone)
 - Posts, projects, tags, and CMS-managed media
 - CMS Pages and their sidebar-menu placement
+
+`/robots.txt` and `/sitemap.xml` are served by the EmDash runtime as well: do
+not add static files or custom routes that replace them.
 
 `src/site.config.ts` intentionally owns presentation values without an EmDash
 equivalent: the starter avatar, bio, location, roles, social links, analytics,
@@ -206,7 +250,7 @@ the full operational flow.
 
 | Command | Action |
 | --- | --- |
-| `bun run cf:dev` | Build and run the Worker locally after bindings are configured |
+| `bun run cf:dev` | Build and run the Worker locally with simulated D1/R2/KV bindings (`wrangler dev --local --port 8787`) |
 | `bun run dev` | Start Astro’s frontend-oriented dev server |
 | `bun run build` | Build Worker SSR output |
 | `bun run check` | Run Astro checks and ESLint |

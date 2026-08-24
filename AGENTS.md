@@ -3,7 +3,7 @@
 ## Commands
 
 ```bash
-bun run cf:dev           # Run the Worker locally after bindings are configured
+bun run cf:dev           # Build and run the Worker locally on port 8787 with simulated D1/R2/KV bindings (wrangler dev --local --port 8787); no Cloudflare account or provisioning required
 bun run dev              # Astro-only frontend development server
 bun run build            # Build production SSR output
 bun run check            # Type-check and lint
@@ -13,6 +13,21 @@ bun run cloudflare:setup # Provision D1/R2 and deploy the configured Worker once
 bun run cf:deploy        # Deploy an already configured Worker
 ```
 
+`wrangler.jsonc` declares no build command: `bun run cf:dev` and `bun run
+cf:deploy` run `bun run build` themselves before invoking Wrangler. Never
+deploy with a bare `wrangler deploy`/`wrangler dev`, which would skip the
+Astro SSR build.
+
+`bun run cf:dev` uses `wrangler dev --local --port 8787`: D1, R2, and KV are
+simulated locally, state persists in `.wrangler/state`, and deleting only that
+directory resets local data. The committed `siteConfig.url` is
+`http://localhost:8787` — the functional local default that exactly matches
+this origin, including for local WebAuthn passkeys. It requires no configured
+remote bindings, no Cloudflare account, and no provisioning; localhost
+passkeys do not transfer to a deployed origin. A clone user must replace
+`siteConfig.url` with their canonical HTTPS URL before any production
+deployment; theme installation attaches no domain.
+
 ## EmDash MCP
 
 Use the committed `emdash-docs` MCP server (`.mcp.json`, official public docs,
@@ -21,7 +36,11 @@ memory. The deployed-site MCP at `<your-deployment-origin>/_emdash/api/mcp`
 requires authentication and is configured per user/client; never place site
 MCP credentials, PATs, or write/admin scope configs in this repository.
 
-## Cloudflare provisioning
+## Cloudflare provisioning (deployment only)
+
+Local development never needs this section: `bun run cf:dev` runs fully
+locally with simulated bindings. The steps below apply only when deploying a
+clone to Cloudflare.
 
 For a new deployment, run `bunx wrangler whoami` first. Authenticate with
 `bunx wrangler login` if necessary, and confirm it targets the intended
@@ -62,15 +81,17 @@ resource approval, external domain/zone ownership, passkey registration, and
 any optional newsletter or third-party credentials.
 
 After initial provisioning, use `bun run cf:dev` for Worker-compatible local
-testing and `bun run cf:deploy` for later deployments. Verify the final HTTPS
-origin responds at the canonical hostname, then complete the EmDash setup
-wizard at `/_emdash/admin/setup` on that final origin only; register its
-production passkey there. `*.workers.dev` URLs are for temporary testing only:
-they are a different WebAuthn origin from the custom domain and must not
-receive the production passkey. On the first wizard screen, clear **Include
-sample content (recommended for new sites)** before continuing so the site
-starts without the seed’s example records; schema, settings, and navigation
-are still applied.
+testing and `bun run cf:deploy` for later deployments.
+
+Production setup is deployment-specific: verify the final HTTPS origin responds
+at the canonical hostname, then complete the EmDash setup wizard at
+`/_emdash/admin/setup` on that final origin only; register its production
+passkey there. `*.workers.dev` URLs are for temporary testing only: they are a
+different WebAuthn origin from the custom domain and must not receive the
+production passkey. On the first wizard screen, the sample-content choice is
+the operator's: both including and clearing **Include sample content
+(recommended for new sites)** are supported; schema, settings, and navigation
+are applied either way.
 
 ## Architecture
 
@@ -78,7 +99,7 @@ Astro 7 runs server-side on Cloudflare Workers. EmDash is the sole source of run
 
 On an empty database, EmDash applies core migrations and the bundled `.emdash/seed.json` automatically. The first request redirects to `/_emdash/admin/setup`; after the one-time setup wizard, the seed provides the schema, initial settings/menu, sample posts/projects, and a CMS-managed Pages collection. Changed seeds do not mutate existing sites.
 
-CMS-backed posts, projects, root Pages, RSS, layout navigation, and search query EmDash. Static template examples and newsletter UI are intentional exceptions. Do not add local-content fallbacks for CMS routes: CMS errors must remain visible. The admin is at `/_emdash/admin`; search uses `/_emdash/api/search`. Do not assume custom collections are automatically included in the sitemap without verifying the installed EmDash runtime.
+CMS-backed posts, projects, root Pages, RSS, layout navigation, and search query EmDash. The newsletter UI is the only static template exception. Do not add local-content fallbacks for CMS routes: CMS errors must remain visible. The admin is at `/_emdash/admin`; search uses `/_emdash/api/search`. `/robots.txt` and `/sitemap.xml` are owned by the EmDash runtime: do not add static or custom replacements. Do not assume custom collections are automatically included in the sitemap without verifying the installed EmDash runtime.
 
 Collection typing comes from generated artifacts: `.emdash/types.ts` (interfaces) and `.emdash/schema.json` (schema snapshot) are committed defaults describing the seeded model so fresh clones type-check. They are derived deterministically from the declared `.emdash/seed.json` without a running server: after any content-model change, edit the seed and run `bun run types:generate`, then commit both regenerated files. The generator reuses EmDash's own type-generation code, so its output matches what `emdash types` would emit for a database seeded with that file. `src/emdash-types.d.ts` only maps slugs to the generated interfaces via `EmDashCollections`; never hand-maintain field definitions there or duplicate the model elsewhere.
 
