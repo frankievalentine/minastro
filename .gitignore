@@ -6,4 +6,5 @@ node_modules/
 .opencode/
 .dev.vars
 emdash-env.d.ts
+.emdash/migrations.json
 .slim/deepwork/
