@@ -1,28 +1,10 @@
 # minastro
 
-An EmDash-first personal-site template built with Astro and Cloudflare Workers.
+A personal-site template built with Astro and [EmDash](https://emdashcms.com), running server-side on Cloudflare Workers. EmDash is a Git-free CMS that stores your content in Cloudflare D1 and media in R2, so everything — posts, projects, pages, settings — is editable from a built-in admin at `/_emdash/admin`. Out of the box you get a blog, a project portfolio, CMS-managed pages, search, RSS, tags, comments, and an optional newsletter.
 
-## Getting Started
+## Quick start
 
-### EmDash MCP servers
-
-This repository commits a single project MCP server, `emdash-docs`
-(`.mcp.json`), which points at the official public EmDash documentation MCP.
-It is read-only and requires no token.
-
-EmDash also exposes an HTTP MCP endpoint on your deployed site at
-`<your-deployment-origin>/_emdash/api/mcp`. Unlike the docs server, it can
-access your live content and must not be committed: configure it per user and
-per client, authenticate with OAuth/device flow or a locally stored
-personal access token (PAT), and start with the least-privilege `content:read`
-scope. Never commit PATs or project-wide write/admin credentials to this
-repository. Verify the endpoint is available after deployment before relying
-on it.
-
-### Local development (no Cloudflare account required)
-
-A fresh clone runs entirely locally with no Cloudflare account, no domain, and
-no provisioning:
+No Cloudflare account needed:
 
 ```bash
 git clone https://github.com/frankievalentine/minastro.git
@@ -31,237 +13,91 @@ bun install
 bun run cf:dev
 ```
 
-`cf:dev` builds the Astro SSR output and then runs `wrangler dev --local
---port 8787`, so the D1, R2, and KV bindings EmDash needs are simulated
-locally. The committed `siteConfig.url` is `http://localhost:8787`, which
-exactly matches this origin — including for local WebAuthn passkeys. Open
-`http://localhost:8787` and complete the one-time EmDash setup at
-`/_emdash/admin/setup`.
+This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Open the URL and complete the one-time setup wizard at `/_emdash/admin/setup`.
 
-- Simulated bindings persist in `.wrangler/state`, so your local content
-  survives restarts.
-- To reset local state, delete **only** the `.wrangler/state` directory; the
-  next `bun run cf:dev` starts from an empty database and re-applies the seed.
-- Passkeys you register on localhost are bound to that origin and do not work
-  in production. Register the production passkey later on your final deployed
-  hostname.
-- On the first setup screen you choose whether to include sample content:
-  both choices are fully supported. Keeping it demonstrates posts, projects,
-  and pages; clearing **Include sample content (recommended for new sites)**
-  gives you a clean site while retaining the schema, settings, and navigation.
+- The committed `siteConfig.url` is `http://localhost:8787`, which matches this origin exactly — including for WebAuthn passkeys.
+- Local content persists in `.wrangler/state` across restarts. To start over, delete only that directory; the next run re-applies the seed.
+- Passkeys registered on localhost do not transfer to production. Register your production passkey later on your final deployed hostname.
+- On the first setup screen you choose whether to include sample content. Both choices are supported; either way the schema, initial settings, and navigation are applied.
 
-`bun run dev` is Astro-only and is useful for frontend work, but it does not
-provide the D1, R2, or Workers bindings required by EmDash.
+`bun run dev` runs Astro alone and does not provide the bindings EmDash needs — use `cf:dev` for full-stack work.
 
-### Deploying to Cloudflare (optional)
+## Set up with an agent
 
-Deployment is a separate step owned by you, the clone user. Nothing in this
-repository provisions on your behalf until you run it. You can develop locally
-indefinitely without ever doing this. Installing the theme attaches no domain
-and performs no deployment; the committed `siteConfig.url` stays on
-`http://localhost:8787` until you deliberately deploy.
-
-Before any production deployment, replace `src/site.config.ts`'s
-`siteConfig.url` with your canonical HTTPS URL (for example,
-`https://example.com`). The localhost default is functional for local
-development only and must not serve production.
-
-#### Agent-guided setup
-
-Open a coding agent in this clone and paste the following prompt:
+Open a coding agent in this clone and paste:
 
 ```text
-Set up a new Minastro deployment from this clone. Read README.md and AGENTS.md
-first. If an emdash-docs MCP server is available in your client, use it for
-current EmDash questions; do not guess EmDash behavior from memory. Run bun
-install, bun run check, bun run seed:validate, bun run build,
-and bunx wrangler whoami; report any failures and confirm the authenticated
-Cloudflare account. Before provisioning anything, ask me for my final
-canonical production hostname and confirm with me that it lives in an active
-Cloudflare zone owned by that account; never plan to serve production from a
-workers.dev address. Do not create Cloudflare resources, attach domains, or
-deploy until I approve. After approval, set src/site.config.ts to
-https://<hostname> and add { "pattern": "<hostname>", "custom_domain": true }
-to a top-level routes array in wrangler.jsonc. Then run bun run
-cloudflare:setup from an interactive terminal, use a unique Worker name, and
-review any Wrangler conflict prompt rather than bypassing it. Skip the optional
-newsletter unless I explicitly provide its Email Sending, Turnstile, and Rate
-Limiting prerequisites. Do not expose or commit secrets. Once deployed, verify
-the final HTTPS origin responds, then guide me through /_emdash/admin/setup at
-that origin only. On the first EmDash setup screen, ask me whether to include
-sample content — both including and clearing “Include sample content
-(recommended for new sites)” are supported — and apply my choice before
-continuing, then smoke-test the public site and CMS routes. Never register the
-production passkey on a workers.dev origin.
+Set up Minastro from this clone. Read AGENTS.md first, and use the emdash-docs
+MCP server if available for current EmDash questions. Work locally first:
+bun install, bun run check, bun run seed:validate, bun run build. Do not create
+Cloudflare resources, secrets, or deployments without my explicit approval.
+Before any production provisioning, ask me for my final canonical hostname and
+confirm it lives in an active Cloudflare zone owned by the authenticated
+account (bunx wrangler whoami). After I approve, follow AGENTS.md to configure
+and deploy, then complete /_emdash/admin/setup on that final origin only —
+never register the production passkey on a workers.dev origin.
 ```
 
-Setup cannot automate everything. You remain responsible for authenticating
-Wrangler and choosing the Cloudflare account, approving resource creation,
-owning the domain's zone in that account, registering the production passkey,
-and supplying any optional newsletter or third-party credentials. Registrar
-transfers and DNS hosted outside Cloudflare are outside what this repository
-automates.
+You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.
 
-### Manual deployment setup
+## How content works
 
-```bash
-git clone https://github.com/frankievalentine/minastro.git
-cd minastro
-bun install
-bun run cloudflare:setup
-```
+EmDash is the sole source of runtime content. Editors work in the admin; there are no local-content fallbacks for CMS routes, so missing content fails visibly rather than silently rendering something else.
 
-Before setup, choose the production hostname you intend to keep. With explicit
-approval, set `src/site.config.ts` to its HTTPS URL and add the hostname as a
-Worker custom-domain route in `wrangler.jsonc`:
+**CMS-owned (edit in `/_emdash/admin`):**
 
-```jsonc
-"routes": [{ "pattern": "example.com", "custom_domain": true }]
-```
+- **Site identity and settings** — title, tagline, logo, posts-per-page pagination, date format, and timezone.
+- **Primary Navigation** — the sidebar menu. An absent or empty menu renders no navigation items.
+- **Posts** — Portable Text body, description, featured flag, featured image, tags, and optional comments.
+- **Projects** — like posts plus status, live URL, and GitHub link.
+- **Pages** — root-level pages rendered at `/{slug}`; add them to Primary Navigation to place them in the sidebar.
+- **Tags** — a shared taxonomy across Posts and Projects.
+- **Home editorial fields** — homepage headline, section titles/descriptions, highlight cards, and newsletter CTA copy.
+- **Listing headers and newsletter page copy** — optional singleton overrides for listing labels/icons and public newsletter-page text.
 
-The interactive setup provisions the required D1, R2, and session KV resources;
-writes their bindings to `wrangler.jsonc`; stores `EMDASH_ENCRYPTION_KEY`; and
-deploys the configured Worker. Run it from a terminal so Wrangler can show any
-custom-domain or DNS conflict prompt.
+**Developer-owned (`src/site.config.ts`):** presentation values with no CMS equivalent — bio, avatar, location, roles, social links, analytics, and newsletter integration settings. Site identity and navigation have no local fallbacks here; they come from the CMS only.
 
-Cloudflare handles DNS and TLS for the attached hostname only when it lives in
-an active zone owned by the authenticated account. Confirm that pairing before
-provisioning; owning a domain registered elsewhere does not let this script
-transfer the registrar or manage arbitrary external DNS.
+The bundled `.emdash/seed.json` initializes empty databases only — it never updates an existing site's schema or content. On the first setup screen, keeping sample content gives you demo posts, projects, and pages; clearing **Include sample content (recommended for new sites)** starts clean while retaining schema, settings, and navigation.
 
-Setup changes `wrangler.jsonc` with the provisioned resource IDs and Worker
-name. The agent/operator applies the approved canonical route and site URL
-before setup. Worker secrets are stored in Cloudflare and are never written to
-the repository. Use a separate clone when testing an installation without
-changing an existing checkout.
+## Use the template
 
-Verify the final HTTPS origin responds at your canonical hostname, then open
-it and complete the one-time EmDash setup at `/_emdash/admin/setup`. Register
-the production passkey at that final origin: `*.workers.dev` and a custom
-domain are different WebAuthn origins. Use `*.workers.dev` only for temporary
-testing; it should never receive the production passkey.
+Common edits:
 
-Minastro’s seed includes optional example posts, projects, and a page. EmDash
-checks **Include sample content (recommended for new sites)** by default; clear
-that checkbox on the first setup screen to create a clean site while retaining
-the schema, settings, and navigation. Both choices are supported; see
-[Local development](#local-development-no-cloudflare-account-required) for the
-same choice on localhost.
+- **Change text and content** — do it in the admin. No rebuild needed.
+- **Change presentation values** (bio, social links, analytics) — edit `src/site.config.ts`.
+- **Change the content model** — edit `.emdash/seed.json`, then regenerate types:
 
-Deploy later changes with:
+  ```bash
+  bun run types:generate
+  ```
 
-```bash
-bun run cf:deploy
-```
+  This regenerates `.emdash/types.ts` and `.emdash/schema.json` offline from the seed; commit both. Collection typing comes from these generated artifacts — never hand-maintain field definitions in `src/emdash-types.d.ts`.
 
-## Customize content
-
-EmDash is the runtime source of truth. It owns:
-
-- Site title, tagline, logo, and primary navigation
-- Posts-per-page pagination and visible date preferences (date format and
-  IANA timezone)
-- Posts, projects, tags, and CMS-managed media
-- CMS Pages and their sidebar-menu placement
-
-`/robots.txt` and `/sitemap.xml` are served by the EmDash runtime as well: do
-not add static files or custom routes that replace them.
-
-`src/site.config.ts` intentionally owns presentation values without an EmDash
-equivalent: the starter avatar, bio, location, roles, social links, analytics,
-and newsletter integration settings. Site identity (title, tagline, logo) and
-primary navigation have no local fallbacks — they come from the CMS only. A
-missing CMS site title fails visibly, and an absent or empty primary menu
-renders no navigation items.
-
-New empty databases receive `.emdash/seed.json`, including initial site
-settings, representative posts, projects, and a CMS-managed **Start here**
-page. Seeds initialize fresh databases only; they do not update an existing
-database. Manage live schema, content, and settings in EmDash; use
-`emdash export-seed --with-content` only when deliberately updating the starter
-seed.
-
-### Generated collection types
-
-The committed `.emdash/types.ts` and `.emdash/schema.json` are generated
-artifacts describing the default model seeded by this repository, so a fresh
-clone gets typed queries for every seeded collection out of the box. They are
-derived deterministically from `.emdash/seed.json`: after changing the content
-model in the seed, regenerate them offline (no running server or auth needed):
-
-```bash
-bun run types:generate
-```
-
-Then commit the updated `.emdash/types.ts` and `.emdash/schema.json`. The
-generator reuses EmDash's own type-generation code, so its output matches what
-`emdash types` emits for a database seeded with that file.
-`src/emdash-types.d.ts` only maps collection slugs to the generated interfaces —
-do not hand-maintain field definitions there.
-
-### Add a sidebar page
-
-1. In **EmDash → Pages**, create and publish a page.
-2. In **EmDash → Navigation → Primary Navigation**, add a **Page** item that
-   references it, then order it where you want in the sidebar.
-
-The menu controls navigation; it does not create page content. Root-level CMS
-page routes are rendered by Minastro while fixed routes such as `/posts`,
-`/projects`, and `/newsletter` retain precedence.
-
-### Rich text
-
-EmDash stores rich text as Portable Text. The editor supports headings;
-bold, italic, underline, and strikethrough marks; links; ordered and unordered
-lists; blockquotes; and code blocks. The seeded **Welcome to your site** post
-exercises these blocks, including a TypeScript code example.
-
-Minastro overrides only the rendering of Portable Text `_type: "code"` blocks
-with its server-side Shiki highlighter (`src/components/CodeBlock.astro`). This
-is a template-level override, not an EmDash-native integration. All other
-built-in Portable Text components are rendered by the EmDash renderer unless
-locally overridden.
-
-### Comments
-
-Comments are enabled on **Posts** via `commentsEnabled` in `.emdash/seed.json`.
-EmDash's migration defaults supply the rest of the policy on fresh databases:
-first-time-commenter moderation and auto-approval for authenticated EmDash
-users. One caveat: as of emdash 0.32 the seed format cannot express the
-auto-closure window, which defaults to 90 days. To keep post comments open
-indefinitely, set **Auto-close comments** to `0` once per deployment in
-**EmDash → Posts → collection settings**.
-
-## Newsletter and Resend
-
-The newsletter page is visible by default so the template demonstrates the
-feature, but signup is disabled until configured. The recommended
-`cloudflare:setup` newsletter phase provisions its D1 database, bindings,
-migrations, and secrets. Before enabling it, verify a sending domain in
-Cloudflare Email Sending, create a Turnstile widget, and obtain a Rate Limiting
-namespace ID.
-
-Cloudflare Email Sending handles double-opt-in confirmation messages. Optional
-Resend synchronization keeps confirmed subscribers in a Resend Segment; create
-and send Broadcasts in Resend. See [docs/newsletter.md](docs/newsletter.md) for
-the full operational flow.
-
-## Commands
+Local development uses `bun run cf:dev`; production deploys use `bun run cf:deploy`. Never deploy with bare `wrangler deploy`/`wrangler dev` — they skip the Astro SSR build.
 
 | Command | Action |
 | --- | --- |
-| `bun run cf:dev` | Build and run the Worker locally with simulated D1/R2/KV bindings (`wrangler dev --local --port 8787`) |
-| `bun run dev` | Start Astro’s frontend-oriented dev server |
-| `bun run build` | Build Worker SSR output |
-| `bun run check` | Run Astro checks and ESLint |
-| `bun run seed:validate` | Validate `.emdash/seed.json` with EmDash |
-| `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` from `.emdash/seed.json` |
-| `bun run cloudflare:setup` | Provision and deploy the initial Cloudflare stack |
+| `bun run cf:dev` | Build and run the Worker locally with simulated D1/R2/KV bindings |
+| `bun run dev` | Astro-only frontend dev server |
+| `bun run build` | Build production SSR output |
+| `bun run check` | Type-check and lint |
+| `bun run seed:validate` | Validate `.emdash/seed.json` |
+| `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` |
+| `bun run cloudflare:setup` | Provision D1/R2/KV and deploy the configured Worker |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |
 
-## Stack
+## Deployment
 
-- Astro 7
-- EmDash CMS with D1 and R2
-- Cloudflare Workers
-- Tailwind CSS 4 and basecoat-css
+Deployment is optional — you can develop locally indefinitely. When you are ready, see [AGENTS.md](AGENTS.md) for provisioning requirements and responsibilities, and [docs/operations.md](docs/operations.md) for the full runbook: backups, restores, staging isolation, post-cutover checks, and production passkey setup.
+
+## Newsletter
+
+The newsletter page is visible by default, but signup stays disabled until its opt-in integration is provisioned (verified Email Sending domain, Turnstile keys, and a Rate Limiting namespace). See [docs/newsletter.md](docs/newsletter.md) for architecture, configuration, and operations.
+
+## Advanced integrations
+
+### EmDash MCP
+
+This repository commits one project MCP server, `emdash-docs` (`.mcp.json`), pointing at the official public EmDash documentation. It is read-only and requires no token.
+
+Your deployed site also exposes `<your-deployment-origin>/_emdash/api/mcp`, which can access live content. Configure it per user and per client — never commit it to this repository. Authenticate with OAuth/device flow or a locally stored personal access token, starting with the least-privilege `content:read` scope. Never commit PATs or write/admin credentials here, and verify the endpoint after deployment before relying on it.
