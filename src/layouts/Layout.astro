@@ -171,19 +171,16 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="generator" content={Astro.generator}>
 
-    <!-- Primary meta -->
     <title>{siteTitle}</title>
     <meta name="title" content={siteTitle}>
     <meta name="description" content={description}>
     <meta name="author" content={siteName}>
     <link rel="canonical" href={canonicalURL}>
 
-    <!-- Icons -->
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="manifest" href="/manifest.webmanifest">
 
-    <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:url" content={canonicalURL}>
     <meta property="og:title" content={siteTitle}>
@@ -192,13 +189,11 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     <meta property="og:locale" content="en_US">
     <meta property="article:author" content={siteName}>
 
-    <!-- Twitter Card -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content={canonicalURL}>
     <meta property="twitter:title" content={siteTitle}>
     <meta property="twitter:description" content={description}>
 
-    <!-- Theme color -->
     <meta
       name="theme-color"
       content="#ffffff"
@@ -210,7 +205,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       media="(prefers-color-scheme: dark)"
     >
 
-    <!-- Sitemap + RSS -->
     <link rel="sitemap" href="/sitemap.xml">
     <link
       rel="alternate"
@@ -219,7 +213,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       href="/rss.xml"
     >
 
-    <!-- Analytics (via Partytown) — only rendered when analytics.enabled is true -->
     {siteConfig.analytics.enabled && siteConfig.analytics.url && (
             <script
                 is:inline
@@ -234,7 +227,8 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     <script is:inline>
       (() => {
         try {
-          const storedTheme = localStorage.getItem("theme");
+          const storedTheme =
+            localStorage.getItem("themeMode") ?? localStorage.getItem("theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           document.documentElement.classList.toggle(
             "dark",
@@ -253,9 +247,8 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     {!standalone && <Search />}
 
     {!standalone && <aside id="site-sidebar" class="sidebar" data-side="left">
-      <nav>
+      <nav aria-label="Primary">
         <section class="scrollbar">
-          <!-- Search trigger -->
           <div class="px-2 pt-2">
             <button
               id="search-trigger"
@@ -286,8 +279,8 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
             </button>
           </div>
 
-          <div role="group">
-            <ul>
+          <div class="relative flex w-full min-w-0 flex-col p-2 text-sm">
+            <ul class="gap-1">
               {primaryNav.map((item) => (
                                 <li>
                                     <a
@@ -309,7 +302,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         </section>
 
         <footer>
-          <!-- User profile popover — avatar trigger at bottom of sidebar -->
           <div class="popover w-full" data-keep-mobile-sidebar-open>
             <button
               type="button"
@@ -318,29 +310,18 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
               data-keep-mobile-sidebar-open
               class="flex w-full items-center gap-3 rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 transition-colors h-12"
             >
-              <!-- Avatar -->
-              <script is:inline>
-                window.addEventListener("error", (event) => {
-                  const avatar = event.target;
-                  if (avatar instanceof HTMLImageElement && avatar.id === "sidebar-avatar") {
-                    avatar.hidden = true;
-                    avatar.nextElementSibling?.removeAttribute("hidden");
-                  }
-                }, true);
-              </script>
               <img
                 id="sidebar-avatar"
                 class="size-8 shrink-0 rounded-lg object-cover ring-1 ring-sidebar-border"
                 src={cmsLogo ?? siteConfig.avatar}
                 alt={siteName}
-              >
+              />
               <div
                 class="flex size-8 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground items-center justify-center text-sm font-semibold ring-1 ring-sidebar-border"
                 hidden
               >
                 {avatarInitial}
               </div>
-              <!-- Identity -->
               <div class="grid flex-1 text-left leading-tight min-w-0">
                 <span
                   class="truncate text-sm font-semibold text-sidebar-foreground"
@@ -350,7 +331,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                   >{siteTagline}</span
                 >
               </div>
-              <!-- Chevron up indicator -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="14"
@@ -368,16 +348,14 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
               </svg>
             </button>
 
-            <!-- Popover panel — opens upward -->
             <div
               id="user-popover"
               data-popover
               data-side="top"
               data-align="start"
               aria-hidden="true"
-              class="w-56"
+              class="w-56 gap-0 p-0"
             >
-              <!-- Social links -->
               <div class="py-1">
                 {social.github && (
                                     <a
@@ -484,7 +462,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
                                 )}
               </div>
 
-              <!-- Divider + theme toggle -->
               <div class="border-t border-border py-1">
                 <button
                   id="theme-toggle"
@@ -536,9 +513,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       </nav>
     </aside>}
 
-    <!-- Sibling of .sidebar — gets auto margin from basecoat sidebar CSS -->
     <div id="page-shell" class="flex flex-col min-h-svh">
-      <!-- Mobile top bar -->
       {!standalone && <header
         class="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 md:hidden"
       >
@@ -573,9 +548,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     </div>
 
     <script>
-      import "basecoat-css/basecoat";
-      import "basecoat-css/popover";
-      import "basecoat-css/sidebar";
+      import "basecoat-css/all";
       import type { TransitionBeforeSwapEvent } from "astro:transitions/client";
 
       // Transfer the dark class to the incoming document before the swap so the
@@ -586,9 +559,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         (
           e as TransitionBeforeSwapEvent
         ).newDocument.documentElement.classList.toggle("dark", isDark);
-        // Basecoat's observer is disconnected when the body is swapped.
-        window.basecoat?.stop();
-        // Release scroll lock before the page swaps out.
         unlockScroll();
         document.getElementById("page-shell")?.removeAttribute("inert");
       });
@@ -626,8 +596,25 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       // After a body swap, restore its components and MutationObserver here.
       let sidebarObserver: MutationObserver | null = null;
       let mobileSidebarWasOpen = false;
-      let restoreSidebarTriggerOnClose = false;
       let firstLoad = true;
+
+      type SidebarElement = HTMLElement & {
+        close?: () => void;
+        open?: () => void;
+        toggle?: () => void;
+      };
+
+      document.addEventListener(
+        "error",
+        (event) => {
+          const avatar = event.target;
+          if (avatar instanceof HTMLImageElement && avatar.id === "sidebar-avatar") {
+            avatar.hidden = true;
+            avatar.nextElementSibling?.removeAttribute("hidden");
+          }
+        },
+        true,
+      );
 
       const syncThemeToggle = () => {
         const themeToggle = document.getElementById("theme-toggle");
@@ -646,7 +633,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         if (!sidebar || !trigger || !pageShell) return;
 
         const isMobile = !window.matchMedia("(min-width: 768px)").matches;
-        const isOpen = !sidebar.hasAttribute("inert");
+        const isOpen = sidebar.getAttribute("aria-hidden") !== "true";
         const isMobileOpen = isMobile && isOpen;
 
         trigger.setAttribute("aria-expanded", String(isOpen));
@@ -657,7 +644,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
           lockScroll();
         } else {
           unlockScroll();
-          if (mobileSidebarWasOpen && restoreSidebarTriggerOnClose) {
+          if (mobileSidebarWasOpen) {
             const activeElement = document.activeElement;
             if (
               !activeElement ||
@@ -667,7 +654,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
               trigger.focus();
             }
           }
-          restoreSidebarTriggerOnClose = false;
         }
 
         mobileSidebarWasOpen = isMobileOpen;
@@ -676,38 +662,23 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
       const reconcileSidebar = () => {
         const isDesktop = window.matchMedia("(min-width: 768px)").matches;
 
-        // Let Basecoat update its own state when the viewport crosses the
-        // breakpoint, rather than changing inert/aria-hidden behind its back.
-        const sidebar = document.getElementById("site-sidebar");
+        const sidebar = document.getElementById("site-sidebar") as SidebarElement | null;
         if (sidebar) {
-          document.dispatchEvent(
-            new CustomEvent("basecoat:sidebar", {
-              detail: {
-                id: sidebar.id,
-                action: isDesktop ? "open" : "close",
-              },
-            }),
-          );
+          if (isDesktop) sidebar.open?.();
+          else sidebar.close?.();
         }
 
         syncMobileSidebar();
       };
 
       const initPage = () => {
-        if (firstLoad) {
-          firstLoad = false;
-        } else {
-          window.basecoat?.initAll();
-          window.basecoat?.start();
-        }
+        if (firstLoad) firstLoad = false;
+        else window.basecoat?.initAll({ force: true });
 
         syncThemeToggle();
 
-        // Keep the mobile drawer's Basecoat state aligned with its trigger,
-        // background inertness, focus restoration, and scroll lock.
         sidebarObserver?.disconnect();
         mobileSidebarWasOpen = false;
-        restoreSidebarTriggerOnClose = false;
         const sidebar = document.getElementById("site-sidebar");
         if (sidebar) {
           sidebarObserver = new MutationObserver(syncMobileSidebar);
@@ -752,25 +723,14 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         const target = e.target as Element;
 
         if (target.closest("#theme-toggle")) {
-          const isDark = !document.documentElement.classList.contains("dark");
-          document.documentElement.classList.toggle("dark", isDark);
+          window.basecoat?.theme.toggle();
           syncThemeToggle();
-          try {
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-          } catch {
-            // The class still applies for this session when storage is unavailable.
-          }
         }
 
         if (target.closest("#mobile-sidebar-trigger")) {
-          const sidebar = document.getElementById("site-sidebar");
+          const sidebar = document.getElementById("site-sidebar") as SidebarElement | null;
           if (!sidebar) return;
-          restoreSidebarTriggerOnClose = true;
-          document.dispatchEvent(
-            new CustomEvent("basecoat:sidebar", {
-              detail: { id: sidebar.id, action: "open" },
-            }),
-          );
+          sidebar.open?.();
           syncMobileSidebar();
           const firstControl = sidebar.querySelector<HTMLElement>(
             'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -781,7 +741,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
 
       document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
-        const sidebar = document.getElementById("site-sidebar");
+        const sidebar = document.getElementById("site-sidebar") as SidebarElement | null;
         if (
           !sidebar ||
           window.matchMedia("(min-width: 768px)").matches ||
@@ -791,12 +751,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
         }
 
         event.preventDefault();
-        restoreSidebarTriggerOnClose = true;
-        document.dispatchEvent(
-          new CustomEvent("basecoat:sidebar", {
-            detail: { id: sidebar.id, action: "close" },
-          }),
-        );
+        sidebar.close?.();
         syncMobileSidebar();
       });
 

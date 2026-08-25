@@ -136,7 +136,7 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
         <header class="mb-12 max-w-2xl">
           {home.eyebrow && (
             <div class="mb-3">
-              <span class="badge-secondary">{home.eyebrow}</span>
+              <span class="badge" data-variant="secondary">{home.eyebrow}</span>
             </div>
           )}
           <h1 class="text-3xl font-bold tracking-tight text-foreground">{home.title}</h1>
@@ -186,7 +186,7 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                         <p class="mt-2 text-xs text-muted-foreground">
                           {post.publishedAt ? formatDate(post.publishedAt) : "Recently"} · {readingTime(extractPlainText(post.content))}
                         </p>
-                        {post.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{post.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
+                        {post.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{post.tags.map((tag) => <span class="badge text-xs" data-variant="outline">{tag}</span>)}</div>}
                       </a>
                     </li>
                   ))}
@@ -217,10 +217,10 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                         {project.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={project.featuredImage.src} alt={project.featuredImage.alt} loading="lazy" />}
                         <div class="flex items-center gap-2">
                           <h3 class="font-medium leading-snug group-hover:underline">{project.title}</h3>
-                          {project.project_status && <span class="badge-outline text-xs">{statusLabel[project.project_status] ?? project.project_status}</span>}
+                          {project.project_status && <span class="badge text-xs" data-variant="outline">{statusLabel[project.project_status] ?? project.project_status}</span>}
                         </div>
                         <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description}</p>
-                        {project.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{project.tags.map((tag) => <span class="badge-outline text-xs">{tag}</span>)}</div>}
+                        {project.tags.length > 0 && <div class="mt-3 flex flex-wrap gap-1.5">{project.tags.map((tag) => <span class="badge text-xs" data-variant="outline">{tag}</span>)}</div>}
                       </a>
                     </li>
                   ))}

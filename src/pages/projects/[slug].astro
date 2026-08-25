@@ -83,7 +83,6 @@ const projectData: ProjectData = {
   currentPage={`/projects/${projectData.slug}`}
 >
   <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
-    <!-- Back link -->
     <a
       href="/projects"
       class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
@@ -106,13 +105,12 @@ const projectData: ProjectData = {
       All projects
     </a>
 
-    <!-- Project header -->
     <header class="mb-8">
       <div class="flex items-center gap-2 flex-wrap mb-3">
         <h1 class="text-3xl font-bold tracking-tight text-foreground leading-tight">
           {projectData.title}
         </h1>
-        <span class="badge-secondary text-xs">
+        <span class="badge text-xs" data-variant="secondary">
           {statusLabel[projectData.projectStatus] ?? projectData.projectStatus}
         </span>
       </div>
@@ -121,7 +119,6 @@ const projectData: ProjectData = {
       </p>
       {projectData.featuredImage && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover" src={projectData.featuredImage.src} alt={projectData.featuredImage.alt} />}
 
-      <!-- Meta links -->
       <div class="flex items-center gap-4 flex-wrap">
         {projectData.github && (
           <a
@@ -191,7 +188,7 @@ const projectData: ProjectData = {
       {projectData.tags.length > 0 && (
         <div class="flex gap-1.5 flex-wrap mt-4">
           {projectData.tags.map((tag) => (
-            <span class="badge-outline text-xs">{tag.label}</span>
+            <span class="badge text-xs" data-variant="outline">{tag.label}</span>
           ))}
         </div>
       )}
@@ -199,18 +196,16 @@ const projectData: ProjectData = {
 
     {hasContent && (
       <>
-        <div role="separator" class="border-t border-border mb-8"></div>
+        <hr class="border-0 border-t border-border mb-8" />
 
-        <!-- Project body -->
         <div class="prose prose-sm prose-neutral dark:prose-invert max-w-none">
           <PortableText value={portableTextContent} components={{ type: { code: CodeBlock } }} />
         </div>
       </>
     )}
 
-    <div role="separator" class="border-t border-border mt-12 mb-8"></div>
+    <hr class="border-0 border-t border-border mt-12 mb-8" />
 
-    <!-- Footer nav -->
     <a
       href="/projects"
       class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"

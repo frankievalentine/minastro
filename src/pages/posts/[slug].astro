@@ -133,7 +133,7 @@ const timeToRead = readingTime(contentRaw);
             <span class="text-border" aria-hidden="true">·</span>
             <div class="flex gap-1.5 flex-wrap">
               {postData.tags.map((tag) => (
-                <span class="badge-outline text-xs">{tag.label}</span>
+                <span class="badge text-xs" data-variant="outline">{tag.label}</span>
               ))}
             </div>
           </>
@@ -141,7 +141,7 @@ const timeToRead = readingTime(contentRaw);
       </div>
     </header>
 
-    <div role="separator" class="border-t border-border mb-8"></div>
+    <hr class="border-0 border-t border-border mb-8" />
 
     <!-- Post body -->
     <div class="prose prose-sm prose-neutral dark:prose-invert max-w-none">
@@ -150,7 +150,7 @@ const timeToRead = readingTime(contentRaw);
 
     {showComments && (
       <>
-        <div role="separator" class="border-t border-border mt-12 mb-8"></div>
+        <hr class="border-0 border-t border-border mt-12 mb-8" />
 
         <section aria-labelledby="comments-heading">
           <div class="mb-6">
@@ -189,7 +189,7 @@ const timeToRead = readingTime(contentRaw);
       </>
     )}
 
-    <div role="separator" class="border-t border-border mt-12 mb-8"></div>
+    <hr class="border-0 border-t border-border mt-12 mb-8" />
 
     <!-- Footer nav -->
     <a

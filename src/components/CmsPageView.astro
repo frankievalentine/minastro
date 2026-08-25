@@ -24,7 +24,7 @@ const { title, description, currentPage, content } = Astro.props;
       <p class="leading-relaxed text-muted-foreground">{description}</p>
     </header>
 
-    <div role="separator" class="mb-8 border-t border-border"></div>
+    <hr class="mb-8 border-0 border-t border-border" />
 
     <article class="prose prose-sm prose-neutral max-w-none dark:prose-invert">
       <PortableText value={content} components={{ type: { code: CodeBlock } }} />

@@ -9,7 +9,7 @@ if (!enabled) Astro.response.status = 404;
   {enabled ? <div class="mx-auto max-w-lg px-6 py-12 md:py-16"><div class="card"><header><h1>Confirm your subscription</h1><p>Use the button below to confirm this email address. Nothing will be sent until you choose to continue.</p></header><section class="grid gap-4"><button id="newsletter-confirm" class="btn w-full" type="button" disabled>Confirm subscription</button><p id="newsletter-result" role="status" aria-live="polite" class="text-sm text-muted-foreground"></p><a id="newsletter-back" class="text-center text-sm underline underline-offset-4" href="/newsletter" hidden>Return to newsletter signup</a></section></div></div> : <div class="mx-auto max-w-lg px-6 py-20 text-center"><h1>Page not found</h1><p class="mt-2 text-muted-foreground">The newsletter is not available.</p><a class="btn mt-6 inline-flex" href="/">Return home</a></div>}
 </Layout>
 
-{enabled && <script>
+<script>
   type NewsletterResponse = { success: boolean; error?: string };
   const isNewsletterResponse = (value: unknown): value is NewsletterResponse => typeof value === "object" && value !== null && "success" in value && typeof value.success === "boolean" && (!("error" in value) || typeof value.error === "string");
   const init = () => {
@@ -31,4 +31,4 @@ if (!enabled) Astro.response.status = 404;
   };
   document.addEventListener("astro:page-load", init);
   init();
-</script>}
+</script>

@@ -97,7 +97,7 @@ const featuredImage = (value: unknown, alt: string) => {
                     {post.data.publishedAt && <time datetime={post.data.publishedAt.toISOString()}>{formatDate(post.data.publishedAt, dateFormat, timezone)}</time>}
                     {post.data.publishedAt && <span aria-hidden="true">·</span>}
                     <span>{readingTime(extractPlainText(post.data.content ?? []))}</span>
-                    {post.data.terms?.tag?.map((tag) => <span class="badge-secondary text-xs">{tag.label ?? tag.name}</span>)}
+                    {post.data.terms?.tag?.map((tag) => <span class="badge text-xs" data-variant="secondary">{tag.label ?? tag.name}</span>)}
                   </div>
                 </section>
               </article>

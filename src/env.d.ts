@@ -6,10 +6,12 @@ export {};
 declare global {
   interface Window {
     basecoat?: {
-      stop: () => void;
-      initAll: () => void;
-      start: () => void;
-      init: (component: string) => void;
+      initAll: (options?: { force?: boolean }) => void;
+      theme: {
+        get: () => "dark" | "light";
+        set: (mode: "dark" | "light") => void;
+        toggle: () => void;
+      };
     };
   }
 }

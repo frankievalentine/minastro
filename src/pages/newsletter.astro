@@ -78,7 +78,11 @@ if (newsletterPage) {
   }
 }
 
-const requiredCmsString = (value: unknown): string => normalizedString(value)!;
+const requiredCmsString = (value: unknown): string => {
+  const normalized = normalizedString(value);
+  if (!normalized) throw new Error("A required newsletter CMS field is empty.");
+  return normalized;
+};
 const copy = newsletterPage ? {
   eyebrow: normalizedString(newsletterPage.eyebrow),
   title: requiredCmsString(newsletterPage.title),
@@ -191,15 +195,15 @@ const emailDescribedBy = copy.emailHelp
           <section>
             <ul class="grid gap-4">
               <li class="flex gap-3">
-                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg></span>
+                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg></span>
                 <div><h3 class="text-sm font-medium text-foreground">{copy.expectationOneTitle}</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">{copy.expectationOneDescription}</p></div>
               </li>
               <li class="flex gap-3">
-                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path></svg></span>
+                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path></svg></span>
                 <div><h3 class="text-sm font-medium text-foreground">{copy.expectationTwoTitle}</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">{copy.expectationTwoDescription}</p></div>
               </li>
               <li class="flex gap-3">
-                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
                 <div><h3 class="text-sm font-medium text-foreground">{copy.expectationThreeTitle}</h3><p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">{copy.expectationThreeDescription}</p></div>
               </li>
             </ul>
@@ -212,7 +216,7 @@ const emailDescribedBy = copy.emailHelp
 
 {enabled && turnstileSiteKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>}
 
-{enabled && turnstileSiteKey && <script>
+<script>
   type NewsletterResponse = { success: boolean; error?: string };
   type Turnstile = { render: (container: HTMLElement, options: { sitekey: string; action: string }) => string | number; getResponse: (widgetId: string | number) => string; reset: (widgetId: string | number) => void };
   const isNewsletterResponse = (value: unknown): value is NewsletterResponse => typeof value === "object" && value !== null && "success" in value && typeof value.success === "boolean" && (!("error" in value) || typeof value.error === "string");
@@ -292,7 +296,7 @@ const emailDescribedBy = copy.emailHelp
   };
   document.addEventListener("astro:page-load", init);
   init();
-</script>}
+</script>
 
 <style>
   @media (prefers-reduced-motion: no-preference) {
