@@ -13,7 +13,10 @@ function isAdminPath(pathname: string): boolean {
 export default {
   ...handler,
   async fetch(request, env, ctx) {
-    const response = await handler.fetch!(request, env, ctx);
+    if (!handler.fetch) {
+      throw new Error("EmDash handler does not expose a fetch handler");
+    }
+    const response = await handler.fetch(request, env, ctx);
     if (!isAdminPath(new URL(request.url).pathname)) return response;
 
     const headers = new Headers(response.headers);

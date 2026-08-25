@@ -27,6 +27,12 @@ export async function GET(context: APIContext) {
       ? settings.tagline
       : "";
 
+  if (!context.site) {
+    throw new Error(
+      "Astro site config is missing `site`; RSS requires a canonical URL.",
+    );
+  }
+
   const { entries: posts, error } = await getEmDashCollection("posts", {
     status: "published",
   });
@@ -58,7 +64,7 @@ export async function GET(context: APIContext) {
   return rss({
     title: rssTitle,
     description: rssDescription,
-    site: context.site!,
+    site: context.site,
     items,
     customData: "<language>en-us</language>",
   });

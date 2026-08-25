@@ -148,7 +148,7 @@ export async function POST(context: APIContext): Promise<Response> {
   // -----------------------------------------------------------------------
   // 7. Send confirmation email if the upsert reserved a slot
   // -----------------------------------------------------------------------
-  if (result.shouldSend && result.confirmToken) {
+  if (result.shouldSend && result.confirmToken && result.confirmationTokenHash) {
     try {
       await sendConfirmationEmail(
         bindings,
@@ -164,7 +164,7 @@ export async function POST(context: APIContext): Promise<Response> {
       await releaseReservation(
         bindings.NEWSLETTER_DB,
         result.email,
-        result.confirmationTokenHash!,
+        result.confirmationTokenHash,
       );
     }
   }

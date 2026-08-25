@@ -106,7 +106,7 @@ async function syncContact(config: ResendConfig, subscriber: SubscriberRow, desi
     return;
   }
 
-  if (segments !== null && segments.includes(config.segmentId)) {
+  if (segments?.includes(config.segmentId)) {
     await resendRequest(config, contactPath, { method: "DELETE" });
   }
 }

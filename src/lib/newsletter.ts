@@ -358,7 +358,7 @@ export async function subscribeAtomic(
 
   // Use the stored unsubscribe_token from RETURNING.  On INSERT this is the
   // newly generated token; on UPDATE (resubscribe) it is the preserved value.
-  const storedUnsubscribeToken = rows![0].unsubscribe_token ?? unsubscribeToken;
+  const storedUnsubscribeToken = rows[0].unsubscribe_token ?? unsubscribeToken;
 
   return {
     shouldSend: true,

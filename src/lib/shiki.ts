@@ -42,7 +42,7 @@ export async function highlightCode(
   code: string,
   language?: string,
 ): Promise<string> {
-  const lang = language && language.trim() ? language.trim() : "text";
+  const lang = language?.trim() ? language.trim() : "text";
 
   try {
     return await codeToHtml(code, {

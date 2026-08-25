@@ -44,5 +44,3 @@ declare module "emdash" {
     navigation_icons: NavigationIcon;
   }
 }
-
-export {};
