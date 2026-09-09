@@ -4,6 +4,7 @@
 
 ```bash
 bun run cf:dev           # Build and run the Worker locally on port 8787 with simulated D1/R2/KV bindings (wrangler dev --local --port 8787); no Cloudflare account or provisioning required
+bun run smoke:worker     # Run isolated local Worker setup/runtime smoke coverage; no credentials or deployment required
 bun run dev              # Astro-only frontend development server
 bun run build            # Build production SSR output
 bun run check            # Type-check and lint

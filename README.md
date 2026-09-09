@@ -10,10 +10,12 @@ No Cloudflare account needed:
 git clone https://github.com/frankievalentine/minastro.git
 cd minastro
 bun install
+cp .dev.vars.example .dev.vars
+# Set EMDASH_BOOTSTRAP_SECRET in .dev.vars to a generated Base64URL value.
 bun run cf:dev
 ```
 
-This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Open the URL and complete the one-time setup wizard at `/_emdash/admin/setup`.
+This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Before `cf:dev`, set the required `EMDASH_BOOTSTRAP_SECRET` local variable to a generated Base64URL value. Open the setup URL with the `bootstrap` query parameter once; the Worker replaces it with a signed HttpOnly cookie that lasts 15 minutes and redirects to a clean setup URL. The bootstrap URL credential remains reusable until the secret is manually revoked.
 
 - The committed `siteConfig.url` is `http://localhost:8787`, which matches this origin exactly — including for WebAuthn passkeys.
 - Local content persists in `.wrangler/state` across restarts. To start over, delete only that directory; the next run re-applies the seed.
@@ -32,10 +34,11 @@ MCP server if available for current EmDash questions. Work locally first:
 bun install, bun run check, bun run seed:validate, bun run build. Do not create
 Cloudflare resources, secrets, or deployments without my explicit approval.
 Before any production provisioning, ask me for my final canonical hostname and
-confirm it lives in an active Cloudflare zone owned by the authenticated
-account (bunx wrangler whoami). After I approve, follow AGENTS.md to configure
-and deploy, then complete /_emdash/admin/setup on that final origin only —
-never register the production passkey on a workers.dev origin.
+the explicitly approved Cloudflare account ID. Require an account-scoped
+CLOUDFLARE_API_TOKEN with the least-privilege scopes documented in
+docs/operations.md; never persist or log it. After I approve, follow AGENTS.md
+to configure and deploy, then complete /_emdash/admin/setup on that final origin
+only — never register the production passkey on a workers.dev origin.
 ```
 
 You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.
@@ -83,12 +86,16 @@ Local development uses `bun run cf:dev`; production deploys use `bun run cf:depl
 | `bun run check` | Type-check and lint |
 | `bun run seed:validate` | Validate `.emdash/seed.json` |
 | `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` |
-| `bun run cloudflare:setup` | Provision D1/R2/KV and deploy the configured Worker |
+| `bun run cloudflare:setup` | Provision with an approved account-scoped token and safely resume the prepared-version deployment |
+| `bun run test:setup` | Run failure-injection tests for resumable provisioning |
+| `bun run smoke:worker` | Start isolated local Worker bindings and smoke-test setup/runtime boundaries |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |
 
 ## Deployment
 
 Deployment is optional — you can develop locally indefinitely. When you are ready, see [AGENTS.md](AGENTS.md) for provisioning requirements and responsibilities, and [docs/operations.md](docs/operations.md) for the full runbook: backups, restores, staging isolation, post-cutover checks, and production passkey setup.
+
+CI and the isolated local Worker smoke test are documented in [docs/ci.md](docs/ci.md).
 
 ## Newsletter
 
