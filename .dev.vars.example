@@ -5,6 +5,9 @@
 # Optional local EmDash secret. Generate one with `bunx emdash secrets generate`.
 EMDASH_ENCRYPTION_KEY=
 
+# Required before `bun run cf:dev`: generate a Base64URL value and set it here.
+EMDASH_BOOTSTRAP_SECRET=
+
 # Newsletter (Turnstile) — set via `bunx wrangler secret put TURNSTILE_SECRET_KEY` in production
 # Get your secret key from https://dash.cloudflare.com/?to=/:account/turnstile
 TURNSTILE_SECRET_KEY=

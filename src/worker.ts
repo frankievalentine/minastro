@@ -1,5 +1,7 @@
 import handler, { createScheduledHandler, PluginBridge } from "@emdash-cms/cloudflare/worker";
+import { protectFirstAdminBootstrap } from "./lib/bootstrap-protection";
 import { drainResendOutbox } from "./lib/newsletter-resend";
+import { logNewsletterEvent, newsletterErrorClass } from "./lib/newsletter-observability";
 
 export { PluginBridge };
 
@@ -13,6 +15,12 @@ function isAdminPath(pathname: string): boolean {
 export default {
   ...handler,
   async fetch(request, env, ctx) {
+    const bootstrapResponse = await protectFirstAdminBootstrap(
+      request,
+      env as { DB?: D1Database; EMDASH_BOOTSTRAP_SECRET?: string },
+    );
+    if (bootstrapResponse) return bootstrapResponse;
+
     if (!handler.fetch) {
       throw new Error("EmDash handler does not expose a fetch handler");
     }
@@ -30,12 +38,16 @@ export default {
   scheduled(controller, env, ctx) {
     try {
       emdashScheduled(controller, env, ctx);
-    } catch (error) {
-      console.error("[scheduled] EmDash maintenance failed:", error);
+    } catch {
+      console.error("[scheduled] EmDash maintenance failed");
     }
     ctx.waitUntil(
       drainResendOutbox(env as Record<string, unknown>).catch((error: unknown) => {
-        console.error("[scheduled] Resend outbox drain failed:", error);
+        logNewsletterEvent("newsletter_scheduled_maintenance_failure", {
+          operation: "maintenance",
+          state: "failed",
+          error_class: newsletterErrorClass(error),
+        });
       }),
     );
   },
