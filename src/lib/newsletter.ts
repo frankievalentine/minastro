@@ -18,11 +18,43 @@
  *   TURNSTILE_SECRET_KEY -- Turnstile secret key for server-side verification
  */
 
+import { logNewsletterEvent, newsletterErrorClass } from "./newsletter-observability";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SubscriberStatus = "pending" | "active" | "unsubscribed";
+export type SubscriberStatus = "pending" | "active" | "unsubscribed" | "erasure_pending";
+
+export type ErasureRequestResult =
+  | { status: "requested" }
+  | { status: "already_pending" }
+  | { status: "not_found" }
+  | { status: "credential_required" }
+  | { status: "credential_mismatch" }
+  | { status: "local_only_not_verified" };
+
+export type ErasurePath = "resend" | "local_only";
+
+export interface ErasureRequestOptions {
+  path?: ErasurePath;
+  credentialFingerprint?: string;
+}
+
+export type ErasureRebindResult = "rebound" | "not_found" | "not_rebindable";
+
+export interface ErasurePreview {
+  subscriber_id: number;
+  status: SubscriberStatus;
+  audit_row_count: number;
+  outbox_row_count: number;
+  outbox_operation: "sync" | "erase" | null;
+  outbox_state: "ready" | "running" | "uncertain" | "remote_deleted" | null;
+  remote_state: "none" | "remote_deleted" | "initial_absent" | "local_only" | null;
+  contact_id_saved: boolean;
+  erasure_path?: ErasurePath | null;
+  credential_bound?: boolean;
+}
 
 /**
  * Shape returned by every newsletter API endpoint.
@@ -45,6 +77,15 @@ export const RESEND_COOLDOWN_MS = 15 * 60 * 1_000;
 
 /** Maximum JSON body size for API requests (8 KB). */
 export const MAX_BODY_BYTES = 8_192;
+
+/** Maximum wall-clock time allowed to read one request body. */
+export const BODY_READ_TIMEOUT_MS = 5_000;
+
+/** Raw token size produced by generateSecureToken(). */
+export const SECURE_TOKEN_BYTES = 32;
+
+/** Base64url length of a 32-byte token without padding. */
+export const SECURE_TOKEN_LENGTH = 43;
 
 /** Turnstile site-verify endpoint. */
 const TURNSTILE_VERIFY_URL =
@@ -112,6 +153,14 @@ export function normalizeEmail(email: string): string {
   return email.toLowerCase().trim();
 }
 
+/** Return a non-reversible custody fingerprint for an operator-approved secret. */
+export async function fingerprintCredential(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /**
  * Minimal email validation -- checks for an `@` with non-empty local-part and
  * domain, and a dot in the domain.  This is intentionally not RFC 5322
@@ -137,12 +186,99 @@ export function validateEmail(email: string): boolean {
  * Suitable for confirmation and unsubscribe tokens.
  */
 export function generateSecureToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const bytes = crypto.getRandomValues(new Uint8Array(SECURE_TOKEN_BYTES));
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Validate the exact unpadded base64url shape emitted by generateSecureToken. */
+export function isSecureToken(value: string): boolean {
+  return value.length === SECURE_TOKEN_LENGTH && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+/**
+ * Read and parse one JSON request body without buffering beyond MAX_BODY_BYTES.
+ * Content-Length is only an early rejection optimization; the stream is always
+ * byte-counted when it is read.
+ */
+export async function readJSONBody(
+  request: Request,
+  timeoutMs = BODY_READ_TIMEOUT_MS,
+): Promise<Record<string, unknown> | null> {
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json") return null;
+
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) return null;
+
+  if (!request.body) return null;
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let byteLength = 0;
+  let text = "";
+
+  const cancel = () => {
+    try {
+      void reader.cancel().catch(() => {
+        // The request stream may already be closed or aborted.
+      });
+    } catch {
+      // The request stream may already be closed or aborted.
+    }
+  };
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const deadline = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      cancel();
+      reject(new Error("request body read timed out"));
+    }, timeoutMs);
+  });
+
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline]);
+      if (timedOut) return null;
+      if (done) {
+        text += decoder.decode();
+        break;
+      }
+
+      if (!(value instanceof Uint8Array)) {
+        cancel();
+        return null;
+      }
+
+      byteLength += value.byteLength;
+      if (byteLength > MAX_BODY_BYTES) {
+        cancel();
+        return null;
+      }
+
+      text += decoder.decode(value, { stream: true });
+    }
+
+    if (timedOut) return null;
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    cancel();
+    return null;
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    try {
+      reader.releaseLock();
+    } catch {
+      // A timed-out stream may still have a pending read being interrupted.
+    }
+  }
 }
 
 /** SHA-256 hex digest of the input string. */
@@ -180,6 +316,17 @@ export async function checkRateLimit(
 ): Promise<boolean> {
   const outcome = await limiter.limit({ key: ip });
   return outcome.success;
+}
+
+export type NewsletterRateLimitScope = "subscribe" | "confirm" | "unsubscribe";
+
+/** Use separate buckets so a signup burst cannot block a valid token link. */
+export function rateLimitKey(
+  request: Request,
+  scope: NewsletterRateLimitScope,
+): string {
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  return `${scope}:${ip}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +399,8 @@ export async function verifyTurnstile(
 // ---------------------------------------------------------------------------
 
 export interface SubscribeResult {
+  /** The subscriber row receiving the admitted confirmation send. */
+  subscriberId?: number;
   /** Whether a confirmation email should be sent. */
   shouldSend: boolean;
   /** The subscriber's email address (for the email send). */
@@ -262,6 +411,8 @@ export interface SubscribeResult {
   confirmToken?: string;
   /** The SHA-256 hash of the confirmation token (for reservation release). */
   confirmationTokenHash?: string;
+  /** Unique durable owner for the admitted confirmation send. */
+  admissionId?: string;
   /** The raw unsubscribe token (stable, preserved across resubscriptions). */
   unsubscribeToken?: string;
 }
@@ -296,50 +447,66 @@ export async function subscribeAtomic(
   const unsubscribeToken = generateSecureToken();
   const confirmTokenHash = await hashToken(confirmToken);
   const confirmTokenExpiresAt = expiresAt(CONFIRM_TOKEN_TTL_MS);
+  const admissionId = crypto.randomUUID();
 
   // Bind order:
   //   1. email                (VALUES)
   //   2. name                 (VALUES)
   //   3. confirmationTokenHash   (VALUES)
   //   4. confirmationExpiresAt   (VALUES)
-  //   5. unsubscribeToken     (VALUES, raw)
-  //   6. consentVersion       (VALUES)
-  //   7. name                 (SET COALESCE)
-  //   8. confirmationTokenHash   (SET)
-  //   9. confirmationExpiresAt   (SET)
-  //  10. consentVersion       (SET)
+  //   5. admissionId          (VALUES)
+  //   6. unsubscribeToken     (VALUES, raw)
+  //   7. consentVersion       (VALUES)
+  //   8. name                 (SET COALESCE)
+  //   9. confirmationTokenHash   (SET)
+  //  10. confirmationExpiresAt   (SET)
+  //  11. admissionId          (SET)
+  //  12. consentVersion       (SET)
   const stmt = db
     .prepare(
       `INSERT INTO newsletter_subscribers
          (email, name, status, confirmation_token_hash, confirmation_expires_at,
-           unsubscribe_token, last_confirmation_sent_at,
+           confirmation_admitted, confirmation_admission_id, unsubscribe_token, last_confirmation_sent_at,
            consent_version, requested_at)
-       VALUES (?, ?, 'pending', ?, ?, ?, datetime('now'), ?, datetime('now'))
+       SELECT ?, ?, 'pending', ?, ?, 1, ?, ?, datetime('now'), ?, datetime('now')
+       WHERE EXISTS (
+         SELECT 1 FROM newsletter_erasure_controls
+         WHERE id = 1 AND admission_state = 'open'
+       )
        ON CONFLICT(email) DO UPDATE SET
          name = COALESCE(?, newsletter_subscribers.name),
          status = 'pending',
          confirmation_token_hash = ?,
          confirmation_expires_at = ?,
+         confirmation_admitted = 1,
+         confirmation_admission_id = ?,
          last_confirmation_sent_at = datetime('now'),
          consent_version = ?,
          requested_at = datetime('now'),
          updated_at = datetime('now')
-       WHERE newsletter_subscribers.status != 'active'
+       WHERE newsletter_subscribers.status NOT IN ('active', 'erasure_pending')
+         AND newsletter_subscribers.confirmation_admitted = 0
          AND (newsletter_subscribers.status = 'unsubscribed'
               OR newsletter_subscribers.last_confirmation_sent_at IS NULL
               OR datetime('now') > datetime(newsletter_subscribers.last_confirmation_sent_at, '+15 minutes'))
-       RETURNING status, unsubscribe_token`,
+         AND EXISTS (
+           SELECT 1 FROM newsletter_erasure_controls
+           WHERE id = 1 AND admission_state = 'open'
+         )
+       RETURNING id, status, unsubscribe_token, confirmation_token_hash, confirmation_admission_id`,
     )
     .bind(
       email,
       name,
       confirmTokenHash,
       confirmTokenExpiresAt,
+      admissionId,
       unsubscribeToken,
       consentVersion,
       name,
       confirmTokenHash,
       confirmTokenExpiresAt,
+      admissionId,
       consentVersion,
     );
 
@@ -348,7 +515,7 @@ export async function subscribeAtomic(
   // RETURNING returns a row when the INSERT succeeded or the UPDATE matched.
   // No row means the subscriber is active or within cooldown.
   const rows = result.results as
-    | Array<{ status: string; unsubscribe_token: string | null }>
+    | Array<{ id: number; status: string; unsubscribe_token: string | null; confirmation_token_hash: string | null; confirmation_admission_id: string | null }>
     | undefined;
   const shouldSend = rows !== undefined && rows.length > 0;
 
@@ -361,11 +528,13 @@ export async function subscribeAtomic(
   const storedUnsubscribeToken = rows[0].unsubscribe_token ?? unsubscribeToken;
 
   return {
+    subscriberId: rows[0].id,
     shouldSend: true,
     email,
     name,
     confirmToken,
     confirmationTokenHash: confirmTokenHash,
+    admissionId: rows[0].confirmation_admission_id ?? admissionId,
     unsubscribeToken: storedUnsubscribeToken,
   };
 }
@@ -375,29 +544,265 @@ export async function subscribeAtomic(
  * email send.  Clears the token fields so the next subscribe request can
  * generate fresh tokens without waiting for the cooldown.
  *
- * Includes both email and the attempted confirmation hash in the WHERE clause
- * to avoid clearing a newer reservation in a concurrent-request race.
+ * Uses the unique admission owner rather than the replaceable confirmation
+ * token hash, so a confirmation completion cannot release another reservation.
  */
 export async function releaseReservation(
   db: D1Database,
   email: string,
-  confirmationTokenHash: string,
+  admissionId: string,
 ): Promise<void> {
   try {
-    await db
-      .prepare(
+    await db.batch([
+      db.prepare(
         `UPDATE newsletter_subscribers
          SET confirmation_token_hash = NULL,
              confirmation_expires_at = NULL,
              last_confirmation_sent_at = NULL,
+             confirmation_admission_id = NULL,
+             confirmation_admitted = 0,
              updated_at = datetime('now')
-         WHERE email = ? AND confirmation_token_hash = ?`,
-      )
-      .bind(email, confirmationTokenHash)
-      .run();
+         WHERE email = ? AND confirmation_admission_id = ? AND confirmation_admitted = 1`,
+      ).bind(email, admissionId),
+      db.prepare(
+        `UPDATE newsletter_erasure_controls
+         SET active_confirmation_sends = MAX(active_confirmation_sends - 1, 0),
+             admission_state = CASE
+               WHEN active_confirmation_sends <= 1 AND NOT EXISTS (
+                 SELECT 1 FROM resend_sync_outbox
+                 WHERE operation = 'erase' AND state IN ('ready', 'running', 'remote_deleted')
+               ) THEN 'open'
+               ELSE admission_state
+             END,
+             updated_at = datetime('now')
+         WHERE id = 1 AND changes() > 0`,
+      ),
+    ]);
   } catch {
     // Best-effort; the cooldown will expire naturally.
   }
+}
+
+/** Release the admission after a confirmation email was accepted by the provider. */
+export async function completeConfirmationAdmission(
+  db: D1Database,
+  subscriberId: number,
+  admissionId: string,
+): Promise<void> {
+  await db.batch([
+    db.prepare(
+      `UPDATE newsletter_subscribers
+       SET confirmation_admitted = 0,
+           confirmation_admission_id = NULL,
+           confirmation_token_hash = CASE WHEN status = 'erasure_pending' THEN NULL ELSE confirmation_token_hash END,
+           confirmation_expires_at = CASE WHEN status = 'erasure_pending' THEN NULL ELSE confirmation_expires_at END,
+           last_confirmation_sent_at = CASE WHEN status = 'erasure_pending' THEN NULL ELSE last_confirmation_sent_at END,
+           updated_at = datetime('now')
+       WHERE id = ? AND confirmation_admission_id = ? AND confirmation_admitted = 1`,
+    ).bind(subscriberId, admissionId),
+    db.prepare(
+      `UPDATE newsletter_erasure_controls
+       SET active_confirmation_sends = MAX(active_confirmation_sends - 1, 0),
+           admission_state = CASE
+             WHEN active_confirmation_sends <= 1 AND NOT EXISTS (
+               SELECT 1 FROM resend_sync_outbox
+               WHERE operation = 'erase' AND state IN ('ready', 'running', 'remote_deleted')
+             ) THEN 'open'
+             ELSE admission_state
+           END,
+           updated_at = datetime('now')
+       WHERE id = 1 AND changes() > 0`,
+    ),
+  ]);
+}
+
+/**
+ * Request a cross-system erasure without exposing subscriber identity. The
+ * existing Resend outbox row is reused and its current owner is preserved so
+ * an in-flight or uncertain sync must quiesce before erase can run.
+ */
+export async function requestNewsletterErasure(
+  db: D1Database,
+  subscriberId: number,
+  options: ErasureRequestOptions = {},
+): Promise<ErasureRequestResult> {
+  if (!Number.isSafeInteger(subscriberId) || subscriberId < 1) return { status: "not_found" };
+  const current = await db
+    .prepare("SELECT status FROM newsletter_subscribers WHERE id = ?")
+    .bind(subscriberId)
+    .first<{ status: SubscriberStatus }>();
+  if (!current) return { status: "not_found" };
+
+  const path = options.path ?? "resend";
+  const control = await db
+    .prepare("SELECT admission_state, resend_mode, credential_fingerprint FROM newsletter_erasure_controls WHERE id = 1")
+    .first<{ admission_state: "open" | "paused"; resend_mode: "unverified" | "resend" | "local_only"; credential_fingerprint: string | null }>();
+  if (!control) return { status: "credential_required" };
+  if (path === "resend") {
+    if (!options.credentialFingerprint) return { status: "credential_required" };
+    if (control.credential_fingerprint && control.credential_fingerprint !== options.credentialFingerprint) {
+      return { status: "credential_mismatch" };
+    }
+  } else if (control.resend_mode === "resend") {
+    return { status: "local_only_not_verified" };
+  } else {
+    const remoteEvidence = await db.prepare(
+      `SELECT 1 AS present
+       FROM resend_sync_outbox
+       WHERE resend_contact_id IS NOT NULL
+          OR remote_state != 'none'
+          OR state IN ('running', 'uncertain', 'remote_deleted')
+       LIMIT 1`,
+    ).first<{ present: number }>();
+    if (remoteEvidence) return { status: "local_only_not_verified" };
+  }
+
+  const wasPending = current.status === "erasure_pending";
+  await db.batch([
+    db.prepare(
+      `UPDATE newsletter_erasure_controls
+       SET admission_state = 'paused',
+           resend_mode = CASE WHEN ? = 'local_only' THEN 'local_only' ELSE 'resend' END,
+           credential_fingerprint = CASE
+             WHEN ? = 'local_only' THEN credential_fingerprint
+             ELSE COALESCE(credential_fingerprint, ?)
+           END,
+           updated_at = datetime('now')
+       WHERE id = 1`,
+    ).bind(path, path, options.credentialFingerprint ?? null),
+    db.prepare(
+      `UPDATE newsletter_subscribers
+       SET status = 'erasure_pending',
+           confirmation_token_hash = CASE WHEN confirmation_admitted = 1 THEN confirmation_token_hash ELSE NULL END,
+           confirmation_expires_at = CASE WHEN confirmation_admitted = 1 THEN confirmation_expires_at ELSE NULL END,
+           confirmation_admission_id = CASE WHEN confirmation_admitted = 1 THEN confirmation_admission_id ELSE NULL END,
+           last_confirmation_sent_at = CASE WHEN confirmation_admitted = 1 THEN last_confirmation_sent_at ELSE NULL END,
+           updated_at = datetime('now')
+       WHERE id = ?
+         AND status != 'erasure_pending'`,
+    ).bind(subscriberId),
+    db.prepare(
+      `INSERT INTO resend_sync_outbox (
+         subscriber_id, operation, desired_active, revision, attempt_count,
+         next_attempt_at, state, lease_token, lease_expires_at,
+         claimed_operation, claimed_revision, resend_contact_id,
+         resend_credential_fingerprint, erasure_path, remote_state,
+         last_http_status, last_error_code, created_at, updated_at
+       ) VALUES (?, 'erase', 0, 1, 0, datetime('now'), 'ready', NULL, NULL,
+                 NULL, NULL, NULL, ?, ?, 'none', NULL, NULL, datetime('now'), datetime('now'))
+       ON CONFLICT(subscriber_id) DO UPDATE SET
+         operation = 'erase',
+         desired_active = 0,
+         revision = CASE
+             WHEN resend_sync_outbox.operation = 'erase' THEN resend_sync_outbox.revision
+             ELSE resend_sync_outbox.revision + 1
+         END,
+         next_attempt_at = datetime('now'),
+         state = CASE
+             WHEN resend_sync_outbox.state IN ('running', 'uncertain', 'remote_deleted') THEN resend_sync_outbox.state
+             ELSE 'ready'
+         END,
+         lease_token = CASE
+             WHEN resend_sync_outbox.state IN ('running', 'uncertain') THEN resend_sync_outbox.lease_token
+             ELSE NULL
+         END,
+         lease_expires_at = CASE
+             WHEN resend_sync_outbox.state IN ('running', 'uncertain') THEN resend_sync_outbox.lease_expires_at
+             ELSE NULL
+         END,
+         claimed_operation = CASE
+             WHEN resend_sync_outbox.state IN ('running', 'uncertain') THEN resend_sync_outbox.claimed_operation
+             ELSE NULL
+         END,
+         claimed_revision = CASE
+             WHEN resend_sync_outbox.state IN ('running', 'uncertain') THEN resend_sync_outbox.claimed_revision
+             ELSE NULL
+         END,
+         resend_contact_id = resend_sync_outbox.resend_contact_id,
+         resend_credential_fingerprint = CASE
+             WHEN resend_sync_outbox.operation = 'erase' AND resend_sync_outbox.resend_credential_fingerprint IS NOT NULL
+               THEN resend_sync_outbox.resend_credential_fingerprint
+             ELSE excluded.resend_credential_fingerprint
+         END,
+         erasure_path = CASE
+             WHEN resend_sync_outbox.operation = 'erase' AND resend_sync_outbox.state IN ('uncertain', 'remote_deleted')
+               THEN resend_sync_outbox.erasure_path
+             ELSE excluded.erasure_path
+         END,
+         remote_state = resend_sync_outbox.remote_state,
+         last_http_status = resend_sync_outbox.last_http_status,
+         last_error_code = resend_sync_outbox.last_error_code,
+         updated_at = datetime('now')`,
+    ).bind(subscriberId, options.credentialFingerprint ?? null, path),
+  ]);
+
+  return { status: wasPending ? "already_pending" : "requested" };
+}
+
+export async function previewNewsletterErasure(
+  db: D1Database,
+  subscriberId: number,
+): Promise<ErasurePreview | null> {
+  if (!Number.isSafeInteger(subscriberId) || subscriberId < 1) return null;
+  return db.prepare(
+    `SELECT
+       s.id AS subscriber_id,
+       s.status,
+       (SELECT COUNT(*) FROM audit_events a WHERE a.subscriber_id = s.id) AS audit_row_count,
+       CASE WHEN o.subscriber_id IS NULL THEN 0 ELSE 1 END AS outbox_row_count,
+       o.operation AS outbox_operation,
+       o.state AS outbox_state,
+       o.remote_state,
+       CASE WHEN o.resend_contact_id IS NULL THEN 0 ELSE 1 END AS contact_id_saved,
+       o.erasure_path,
+       CASE WHEN o.resend_credential_fingerprint IS NULL THEN 0 ELSE 1 END AS credential_bound
+     FROM newsletter_subscribers s
+     LEFT JOIN resend_sync_outbox o ON o.subscriber_id = s.id
+     WHERE s.id = ?`,
+  ).bind(subscriberId).first<{
+    subscriber_id: number;
+    status: SubscriberStatus;
+    audit_row_count: number;
+    outbox_row_count: number;
+    outbox_operation: "sync" | "erase" | null;
+    outbox_state: ErasurePreview["outbox_state"];
+    remote_state: ErasurePreview["remote_state"];
+    contact_id_saved: number;
+    erasure_path: ErasurePath | null;
+    credential_bound: number;
+  }>().then((row) => row ? {
+    ...row,
+    contact_id_saved: row.contact_id_saved === 1,
+    credential_bound: row.credential_bound === 1,
+  } : null);
+}
+
+export async function rebindNewsletterErasure(
+  db: D1Database,
+  subscriberId: number,
+  credentialFingerprint: string,
+): Promise<ErasureRebindResult> {
+  if (!credentialFingerprint) return "not_rebindable";
+  const existing = await db.prepare(
+    `SELECT state, operation FROM resend_sync_outbox
+     WHERE subscriber_id = ? AND operation = 'erase'`,
+  ).bind(subscriberId).first<{ state: string; operation: string }>();
+  if (!existing) return "not_found";
+  if (!['ready', 'uncertain'].includes(existing.state)) return "not_rebindable";
+  const result = await db.batch([
+    db.prepare(
+      `UPDATE newsletter_erasure_controls
+       SET resend_mode = 'resend', credential_fingerprint = ?,
+           rebind_revision = rebind_revision + 1, updated_at = datetime('now')
+       WHERE id = 1`,
+    ).bind(credentialFingerprint),
+    db.prepare(
+      `UPDATE resend_sync_outbox
+       SET resend_credential_fingerprint = ?, updated_at = datetime('now')
+       WHERE subscriber_id = ? AND operation = 'erase' AND state IN ('ready', 'uncertain')`,
+    ).bind(credentialFingerprint, subscriberId),
+  ]);
+  return result[1]?.success && (result[1].meta?.changes ?? 0) === 1 ? "rebound" : "not_rebindable";
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +867,7 @@ export async function unsubscribeSubscriber(
            last_unsubscribed_at = datetime('now'),
            updated_at = datetime('now')
        WHERE unsubscribe_token = ?
-         AND status != 'unsubscribed'
+         AND status NOT IN ('unsubscribed', 'erasure_pending')
        RETURNING id`,
     )
     .bind(token)
@@ -534,13 +939,26 @@ export async function sendConfirmationEmail(
 </body>
 </html>`;
 
-  await bindings.NEWSLETTER_EMAIL.send({
-    from: senderAddress,
-    to,
-    subject: "Confirm your newsletter subscription",
-    text: textBody,
-    html: htmlBody,
-  });
+  try {
+    await bindings.NEWSLETTER_EMAIL.send({
+      from: senderAddress,
+      to,
+      subject: "Confirm your newsletter subscription",
+      text: textBody,
+      html: htmlBody,
+    });
+    logNewsletterEvent("newsletter_confirmation_delivery", {
+      operation: "confirmation",
+      state: "accepted",
+    });
+  } catch (error) {
+    logNewsletterEvent("newsletter_confirmation_delivery", {
+      operation: "confirmation",
+      state: "failed",
+      error_class: newsletterErrorClass(error),
+    });
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------

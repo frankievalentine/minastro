@@ -19,7 +19,9 @@ function sameSecret(actual: string, expected: string) {
 }
 
 function csvCell(value: string | null) {
-  return `"${(value ?? "").replace(/"/g, '""').replace(/[\r\n]/g, " ")}"`;
+  const normalized = (value ?? "").replace(/[\r\n]/g, " ");
+  const formulaSafe = /^[\t ]*[=+\-@]/.test(normalized) ? `'${normalized}` : normalized;
+  return `"${formulaSafe.replace(/"/g, '""')}"`;
 }
 
 export async function GET(context: APIContext): Promise<Response> {
