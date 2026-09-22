@@ -35,13 +35,13 @@
     "newsletter:migrate:remote": "bunx wrangler d1 migrations apply NEWSLETTER_DB --remote"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.2.4",
+    "@astrojs/cloudflare": "^14.3.2",
     "@astrojs/partytown": "^2.1.7",
     "@astrojs/react": "^6.0.4",
     "@astrojs/rss": "^4.0.19",
     "@emdash-cms/cloudflare": "0.35.0",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "7.2.8",
+    "astro": "7.3.3",
     "basecoat-css": "^1.0.2",
     "emdash": "0.35.0",
     "react": "^19.2.8",

@@ -45,5 +45,11 @@ export default defineConfig({
   }),
   vite: {
     plugins: [tailwindcss()],
+    optimizeDeps: {
+      // Only the RSS route imports @astrojs/rss, so Vite discovers it lazily on
+      // the first /rss.xml request and reloads the SSR runtime mid-flight.
+      // Pre-declaring it keeps a cold dev start free of re-optimization reloads.
+      include: ["@astrojs/rss"],
+    },
   },
 });
