@@ -11,12 +11,14 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned to a fixed LTS image instead of ubuntu-latest, which GitHub is
+    # migrating to Ubuntu 26 on 2026-10-19. Move to ubuntu-26.04 when ready.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
