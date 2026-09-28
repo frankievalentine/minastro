@@ -57,9 +57,9 @@ export const siteConfig: SiteConfig = {
     consentVersion: "1.0",
     expectedHostname: "your-domain.com",
   },
-  analytics: {
-    enabled: false,
-    url: "https://your-analytics.com/api/script.js",
-    domain: "your-domain.com",
-  },
+  // Optional custom analytics script for non-Cloudflare providers. Cloudflare
+  // Web Analytics needs nothing here: enable it in the Cloudflare dashboard and
+  // it injects its beacon automatically. Leave `enabled` false for Cloudflare or
+  // when you want no analytics at all.
+  analytics: { enabled: false },
 };

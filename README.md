@@ -59,13 +59,18 @@ group and do not assume defaults for either.
 1. Developer-owned presentation values for src/site.config.ts: the avatar to
 use; my location; my roles or short titles (e.g. "Software Engineer"); a short
 bio; my social links (GitHub, X/Twitter, LinkedIn, and a public contact email —
-I may skip any I do not use); whether to enable analytics and, if so, the script
-URL and domain; and whether to enable the newsletter signup and, if so, its
-sender address, Turnstile site key, expected hostname, consent version, and the
-short public description shown on the newsletter page. Leave analytics and the
-newsletter signup disabled (and their optional sub-fields, including the
-description, clear) unless I confirm I want them and give you the values —
-never invent placeholders like "yourusername" or "your-domain.com".
+I may skip any I do not use); my analytics choice — Cloudflare Web Analytics
+(recommended; the default), a different provider, or none — and whether to
+enable the newsletter signup and, if so, its sender address, Turnstile site
+key, expected hostname, consent version, and the short public description shown
+on the newsletter page. For Cloudflare Web Analytics, keep the custom analytics
+hook in src/site.config.ts disabled and set it up in the Cloudflare dashboard
+after the site is deployed (see Analytics below); only ask for a script URL and
+domain — or provider-specific snippet details — if I pick a different provider.
+Leave the custom analytics hook and the newsletter signup disabled (and their
+optional sub-fields, including the description, clear) unless I confirm I want
+them and give you the values — never invent placeholders like "yourusername" or
+"your-domain.com".
 
 2. CMS-owned site details: the site title, tagline, logo, and the primary
 navigation menu I want. These are owned by the EmDash CMS at runtime, not
@@ -144,6 +149,23 @@ Local development uses `bun run cf:dev`; production deploys use `bun run cf:depl
 Deployment is optional — you can develop locally indefinitely. When you are ready, see [AGENTS.md](AGENTS.md) for provisioning requirements and responsibilities, and [docs/operations.md](docs/operations.md) for the full runbook: backups, restores, staging isolation, post-cutover checks, and production passkey setup.
 
 CI and the isolated local Worker smoke test are documented in [docs/ci.md](docs/ci.md).
+
+## Analytics
+
+Cloudflare Web Analytics is the recommended default for production sites deployed through this template. It needs no script tag, token, or Worker binding in this repository: you enable it in the Cloudflare dashboard once the site is live on its custom domain, and Cloudflare injects the beacon into your responses. The beacon script itself loads from `static.cloudflareinsights.com`, while its measurements post to your own origin at `/cdn-cgi/rum`.
+
+To turn it on, after the site responds on the final HTTPS hostname:
+
+1. In the Cloudflare dashboard for the zone that owns your hostname, open **Web Analytics** and add the site (this is the proxied-hostname flow; it requires the hostname to be proxied through Cloudflare, which is how this template attaches its custom domain).
+2. Verify it is live rather than assuming. Load a public page and check the network panel for the beacon script, then navigate within the site or hide the tab and confirm the `POST /cdn-cgi/rum` request fires. Allow some delay for ingestion before the dashboard shows data.
+3. Auto-injection covers the whole zone, so it also applies to `/_emdash/admin`. SPA navigation on Minastro is tracked automatically, with no extra configuration. If the beacon never appears, check that responses do not send `Cache-Control: public, no-transform` on the public HTML, which suppresses automatic injection; if they do, remove that directive.
+
+Because Cloudflare injects the site-wide beacon itself, leave the custom analytics hook in `src/site.config.ts` disabled (`analytics.enabled: false`) when you choose Cloudflare Web Analytics. Never put a Cloudflare token, account ID, or snippet into the config for this option, and do not also add a custom script — that only creates duplicate or redundant tracking.
+
+If you prefer a different provider, or none at all, that is fully supported:
+
+- **Another provider:** set `analytics.enabled: true` with its `url`, and set `domain` only if the provider reads a `data-domain` attribute. The template loads it through the Partytown `text/partytown` script in `src/layouts/Layout.astro`, so it is offloaded from the main thread. Provider snippets that need something other than a script `src` plus `data-domain` (extra inline config, a different attribute scheme such as `data-website-id`, an `async` loader) require editing `Layout.astro` — the current hook only covers the plain script-tag case.
+- **None:** leave `analytics.enabled: false`, and also disable or skip Cloudflare Web Analytics in the dashboard. Cloudflare injection is independent of this config, so the hook alone does not turn analytics off.
 
 ## Newsletter
 
