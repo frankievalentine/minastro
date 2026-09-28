@@ -7,13 +7,14 @@
  *
  * This file contains no field definitions. It maps collection slugs to the
  * generated interfaces so `getEmDashCollection` / `getEmDashEntry` infer
- * typed data, and re-exports the two EmDash helper types that
+ * typed data, and re-exports the EmDash helper types that
  * `.emdash/types.ts` references as ambient globals.
  *
- * The ambient declarations exist because the EmDash 0.32 CLI emits
- * `ContentBylineCredit` / `TaxonomyTerm` references in `.emdash/types.ts`
- * without importing them (its dev-server-generated `emdash-env.d.ts` does
- * import them). If a future CLI version fixes the emit, these can be removed.
+ * The ambient declarations exist because the EmDash type generator emits
+ * `BylineSummary` / `ContentBylineCredit` / `TaxonomyTerm` references in
+ * `.emdash/types.ts` without importing them (its dev-server-generated
+ * `emdash-env.d.ts` does import them). If a future CLI version fixes the
+ * emit, these can be removed.
  */
 
 import type {
@@ -28,6 +29,7 @@ import type {
 } from "../.emdash/types";
 
 declare global {
+  type BylineSummary = import("emdash").BylineSummary;
   type ContentBylineCredit = import("emdash").ContentBylineCredit;
   type TaxonomyTerm = import("emdash").TaxonomyTerm;
 }
