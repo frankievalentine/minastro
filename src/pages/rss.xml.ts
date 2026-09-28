@@ -48,8 +48,8 @@ export async function GET(context: APIContext) {
         (a.data.publishedAt?.getTime() ?? 0),
     )
     .flatMap((post) => {
-      const { publishedAt, slug } = post.data;
-      if (!(publishedAt instanceof Date) || !slug) {
+      const { publishedAt } = post.data;
+      if (!(publishedAt instanceof Date)) {
         return [];
       }
 
@@ -57,7 +57,7 @@ export async function GET(context: APIContext) {
         title: post.data.title,
         description: post.data.description,
         pubDate: publishedAt,
-        link: `/posts/${slug}/`,
+        link: `/posts/${encodeURIComponent(post.id)}/`,
       }];
     });
 

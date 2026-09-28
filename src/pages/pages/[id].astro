@@ -1,13 +1,15 @@
 ---
 export const prerender = false;
 
-import { getEmDashEntry } from "emdash";
+import { decodeSlug, getEmDashEntry } from "emdash";
 import type { PortableTextBlock } from "emdash";
 import CmsPageView from "../../components/CmsPageView.astro";
 
 // Preview-only route for the EmDash admin preview URL (`/pages/<id>?_preview=...`).
 // Public Pages are always served by `src/pages/[slug].astro`.
-const id = Astro.params.id;
+// The resolver matches an entry by slug or stored id, so the decoded param
+// works for both the admin preview URL and a percent-encoded slug.
+const id = decodeSlug(Astro.params.id);
 if (!id) {
   return new Response(null, { status: 404 });
 }

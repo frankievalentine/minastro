@@ -1,5 +1,6 @@
 ---
 import { getEmDashCollection, getSiteSettings, extractPlainText } from "emdash";
+import { Image } from "emdash/ui";
 import ListingHeaderMeta from "../../components/ListingHeaderMeta.astro";
 import Layout from "../../layouts/Layout.astro";
 import { formatDate, readingTime } from "../../utils";
@@ -58,11 +59,12 @@ const postsHeader = listingHeader
     }
   : { label: "Writing", icon: "posts" };
 
-const featuredImage = (value: unknown, alt: string) => {
-  if (typeof value !== "object" || value === null) return undefined;
-  const { src, alt: imageAlt } = value as { src?: unknown; alt?: unknown };
-  if (typeof src !== "string" || !src.trim()) return undefined;
-  return { src, alt: typeof imageAlt === "string" && imageAlt.trim() ? imageAlt : alt };
+// The media field's own alt wins; the entry title is the fallback. EmDash's
+// Image component defaults to the media alt only, so pass the resolved value.
+const imageAlt = (value: unknown, fallback: string): string => {
+  if (typeof value !== "object" || value === null) return fallback;
+  const alt = (value as { alt?: unknown }).alt;
+  return typeof alt === "string" && alt.trim() ? alt : fallback;
 };
 ---
 
@@ -82,10 +84,10 @@ const featuredImage = (value: unknown, alt: string) => {
       {posts.length > 0 ? (
         <div class="grid gap-4">
           {posts.map((post) => (
-            <a href={`/posts/${post.data.slug}`} class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <a href={`/posts/${encodeURIComponent(post.id)}`} class="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <article class="card h-full transition-colors group-hover:bg-accent/40">
                 <section>
-                  {featuredImage(post.data.featured_image, post.data.title) && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src={featuredImage(post.data.featured_image, post.data.title)?.src} alt={featuredImage(post.data.featured_image, post.data.title)?.alt} loading="lazy" />}
+                  {post.data.featured_image && <Image image={post.data.featured_image} alt={imageAlt(post.data.featured_image, post.data.title)} width={800} height={450} class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" />}
                   <div class="flex items-start justify-between gap-4">
                     <div class="min-w-0 flex-1">
                       <h3 class="mb-1 text-base font-semibold leading-snug text-foreground">{post.data.title}</h3>

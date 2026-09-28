@@ -1,12 +1,12 @@
 ---
-import { getEmDashCollection, extractPlainText, type PortableTextBlock } from "emdash";
+import { getEmDashCollection, extractPlainText, type ImageValue, type PortableTextBlock } from "emdash";
+import { Image } from "emdash/ui";
 import HomeHighlightIcon from "../components/HomeHighlightIcon.astro";
 import Layout from "../layouts/Layout.astro";
 import { siteConfig } from "../site.config";
 import { formatDate, readingTime } from "../utils";
-type FeaturedImage = { src: string; alt: string };
-type HomepagePost = { title: string; slug: string; description: string; publishedAt: Date | null; content: PortableTextBlock[]; tags: string[]; featuredImage?: FeaturedImage };
-type HomepageProject = { title: string; slug: string; description: string; publishedAt: Date | null; featured: boolean; project_status: string | undefined; tags: string[]; featuredImage?: FeaturedImage };
+type HomepagePost = { id: string; title: string; description: string; publishedAt: Date | null; content: PortableTextBlock[]; tags: string[]; featuredImage?: ImageValue };
+type HomepageProject = { id: string; title: string; description: string; publishedAt: Date | null; featured: boolean; project_status: string | undefined; tags: string[]; featuredImage?: ImageValue };
 type HighlightIcon = "database" | "workflow" | "search" | "mail";
 
 const highlightIcons = new Set<HighlightIcon>(["database", "workflow", "search", "mail"]);
@@ -36,11 +36,12 @@ const safeCtaHref = (value: string): string => {
 };
 
 const toDate = (value: unknown): Date | null => value instanceof Date ? value : null;
-const toFeaturedImage = (value: unknown, fallbackAlt: string): FeaturedImage | undefined => {
-  if (typeof value !== "object" || value === null) return undefined;
-  const { src, alt } = value as { src?: unknown; alt?: unknown };
-  if (typeof src !== "string" || !src.trim()) return undefined;
-  return { src, alt: typeof alt === "string" && alt.trim() ? alt : fallbackAlt };
+// The media field's own alt wins; the entry title is the fallback. EmDash's
+// Image component defaults to the media alt only, so pass the resolved value.
+const imageAlt = (value: unknown, fallback: string): string => {
+  if (typeof value !== "object" || value === null) return fallback;
+  const alt = (value as { alt?: unknown }).alt;
+  return typeof alt === "string" && alt.trim() ? alt : fallback;
 };
 
 const [homeResult, highlightsResult, postsResult, projectsResult] = await Promise.all([
@@ -99,24 +100,24 @@ const highlights = highlightsResult.entries.map(({ data }) => {
 });
 
 const posts: HomepagePost[] = postsResult.entries.map((post) => ({
+  id: post.id,
   title: post.data.title,
-  slug: post.data.slug ?? "",
   description: post.data.description,
   publishedAt: toDate(post.data.publishedAt),
   content: post.data.content ?? [],
   tags: (post.data.terms?.tag ?? []).map((tag) => tag.label ?? tag.name),
-  featuredImage: toFeaturedImage(post.data.featured_image, post.data.title),
+  featuredImage: post.data.featured_image,
 }));
 
 const projects: HomepageProject[] = projectsResult.entries.map((project) => ({
+  id: project.id,
   title: project.data.title,
-  slug: project.data.slug ?? "",
   description: project.data.description,
   publishedAt: toDate(project.data.publishedAt),
   featured: project.data.featured ?? false,
   project_status: project.data.project_status,
   tags: (project.data.terms?.tag ?? []).map((tag) => tag.label ?? tag.name),
-  featuredImage: toFeaturedImage(project.data.featured_image, project.data.title),
+  featuredImage: project.data.featured_image,
 }));
 
 const latestPosts = posts
@@ -179,8 +180,8 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                 <ul class="grid gap-4">
                   {latestPosts.map((post) => (
                     <li>
-                      <a href={`/posts/${post.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        {post.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={post.featuredImage.src} alt={post.featuredImage.alt} loading="lazy" />}
+                      <a href={`/posts/${encodeURIComponent(post.id)}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {post.featuredImage && <Image image={post.featuredImage} alt={imageAlt(post.featuredImage, post.title)} width={800} height={450} class="mb-3 aspect-[16/9] w-full rounded-md object-cover" />}
                         <h3 class="font-medium leading-snug group-hover:underline">{post.title}</h3>
                         <p class="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{post.description}</p>
                         <p class="mt-2 text-xs text-muted-foreground">
@@ -213,8 +214,8 @@ const statusLabel: Record<string, string> = { active: "Active", wip: "WIP", arch
                 <ul class="grid gap-4">
                   {selectedProjects.map((project) => (
                     <li>
-                      <a href={`/projects/${project.slug}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        {project.featuredImage && <img class="mb-3 aspect-[16/9] w-full rounded-md object-cover" src={project.featuredImage.src} alt={project.featuredImage.alt} loading="lazy" />}
+                      <a href={`/projects/${encodeURIComponent(project.id)}`} class="group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {project.featuredImage && <Image image={project.featuredImage} alt={imageAlt(project.featuredImage, project.title)} width={800} height={450} class="mb-3 aspect-[16/9] w-full rounded-md object-cover" />}
                         <div class="flex items-center gap-2">
                           <h3 class="font-medium leading-snug group-hover:underline">{project.title}</h3>
                           {project.project_status && <span class="badge text-xs" data-variant="outline">{statusLabel[project.project_status] ?? project.project_status}</span>}

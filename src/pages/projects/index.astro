@@ -1,5 +1,6 @@
 ---
 import { getEmDashCollection } from "emdash";
+import { Image } from "emdash/ui";
 import ListingHeaderMeta from "../../components/ListingHeaderMeta.astro";
 import Layout from "../../layouts/Layout.astro";
 
@@ -55,11 +56,12 @@ const statusVariant: Record<string, "outline" | "secondary"> = {
   archived: "outline",
 };
 
-const featuredImage = (value: unknown, alt: string) => {
-  if (typeof value !== "object" || value === null) return undefined;
-  const { src, alt: imageAlt } = value as { src?: unknown; alt?: unknown };
-  if (typeof src !== "string" || !src.trim()) return undefined;
-  return { src, alt: typeof imageAlt === "string" && imageAlt.trim() ? imageAlt : alt };
+// The media field's own alt wins; the entry title is the fallback. EmDash's
+// Image component defaults to the media alt only, so pass the resolved value.
+const imageAlt = (value: unknown, fallback: string): string => {
+  if (typeof value !== "object" || value === null) return fallback;
+  const alt = (value as { alt?: unknown }).alt;
+  return typeof alt === "string" && alt.trim() ? alt : fallback;
 };
 ---
 
@@ -81,11 +83,11 @@ const featuredImage = (value: unknown, alt: string) => {
           {sortedProjects.map((project) => (
             <article class="card group h-full transition-colors hover:bg-accent/40">
               <section>
-                {featuredImage(project.data.featured_image, project.data.title) && <img class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" src={featuredImage(project.data.featured_image, project.data.title)?.src} alt={featuredImage(project.data.featured_image, project.data.title)?.alt} loading="lazy" />}
+                {project.data.featured_image && <Image image={project.data.featured_image} alt={imageAlt(project.data.featured_image, project.data.title)} width={800} height={450} class="mb-4 aspect-[16/9] w-full rounded-md object-cover ring-1 ring-black/10 dark:ring-white/10" />}
                 <div class="flex items-start justify-between gap-4">
                   <div class="min-w-0 flex-1">
                     <div class="mb-1 flex flex-wrap items-center gap-2">
-                      <h3 class="text-base font-semibold leading-snug text-foreground"><a href={`/projects/${project.data.slug}`} class="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{project.data.title}</a></h3>
+                      <h3 class="text-base font-semibold leading-snug text-foreground"><a href={`/projects/${encodeURIComponent(project.id)}`} class="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{project.data.title}</a></h3>
                       <span class="badge text-xs" data-variant={statusVariant[project.data.project_status ?? "active"] ?? "outline"}>{statusLabel[project.data.project_status ?? "active"] ?? project.data.project_status ?? "active"}</span>
                     </div>
                     <p class="text-sm leading-relaxed text-muted-foreground">{project.data.description}</p>

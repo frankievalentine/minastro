@@ -1,11 +1,11 @@
 ---
 export const prerender = false;
 
-import { getEmDashEntry } from "emdash";
+import { decodeSlug, getEmDashEntry } from "emdash";
 import type { PortableTextBlock } from "emdash";
 import CmsPageView from "../components/CmsPageView.astro";
 
-const slug = Astro.params.slug;
+const slug = decodeSlug(Astro.params.slug);
 if (!slug) {
   return new Response(null, { status: 404 });
 }
