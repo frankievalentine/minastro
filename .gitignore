@@ -2,8 +2,6 @@ dist/
 node_modules/
 .astro/
 .wrangler/
-.claude/
-.opencode/
 .dev.vars
 emdash-env.d.ts
 .emdash/migrations.json

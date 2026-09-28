@@ -1,0 +1,8 @@
+# Project-scoped Codex MCP configuration for this repository.
+#
+# This server is the official public EmDash documentation: read-only, no token.
+# Codex loads project-scoped config only after the project is trusted; see the
+# "EmDash MCP" section in AGENTS.md and README.md.
+
+[mcp_servers.emdash-docs]
+url = "https://docs.emdashcms.com/mcp"

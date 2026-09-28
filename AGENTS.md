@@ -29,13 +29,56 @@ passkeys do not transfer to a deployed origin. A site owner must replace
 `siteConfig.url` with their canonical HTTPS URL before any production
 deployment; theme installation attaches no domain.
 
-## EmDash MCP
+## EmDash agent reference
 
-Use the committed `emdash-docs` MCP server (`.mcp.json`, official public docs,
-read-only, no token) for current EmDash questions instead of relying on
-memory. The deployed-site MCP at `<your-deployment-origin>/_emdash/api/mcp`
-requires authentication and is configured per user/client; never place site
-MCP credentials, PATs, or write/admin scope configs in this repository.
+### Bundled skill (primary)
+
+EmDash ships an official `building-emdash-site` agent skill, bundled into this
+template as `.agents/skills/building-emdash-site/SKILL.md` and version-pinned to
+the installed EmDash release (`emdash` 1.0.1 in `package.json`). It is the
+primary reference for EmDash work here: read it before editing queries, seeds,
+Portable Text rendering, menus, taxonomies, widgets, or deployment config.
+
+Read `SKILL.md` first, then the reference it points to for the task at hand:
+
+- `.agents/skills/building-emdash-site/references/configuration.md` — `astro.config.mjs`, `live.config.ts`, deployment targets, type generation
+- `.agents/skills/building-emdash-site/references/schema-and-seed.md` — collections, field types, taxonomies, menus, widget areas, the seed format
+- `.agents/skills/building-emdash-site/references/querying-and-rendering.md` — content queries, Portable Text, the Image component, caching, page patterns
+- `.agents/skills/building-emdash-site/references/site-features.md` — settings, navigation, taxonomies, widgets, search, SEO, comments
+
+The skill describes generic EmDash projects. Where it differs from this
+template, follow this repository's conventions and commands:
+
+- Seed path is `.emdash/seed.json` (declared via the `emdash.seed` field in `package.json`), not `seed/seed.json`.
+- Regenerate collection types with `bun run types:generate`; it derives `.emdash/types.ts` and `.emdash/schema.json` from the seed offline.
+- Run and test locally with `bun run cf:dev` (port 8787, simulated D1/R2/KV), not `pnpm dev`/`npm run dev`.
+- Validate the seed with `bun run seed:validate` and type-check with `bun run check`.
+- Deployment follows the Cloudflare provisioning section below; do not substitute the skill's generic deploy steps.
+
+Client discovery needs no extra install: Codex and OpenCode both scan
+`.agents/skills` directly, Claude Code discovers it through the committed
+`.claude/skills` symlink to `.agents/skills`, and this document also points
+agents at the same files. Edit the skill only under `.agents/skills`; the
+symlink cannot drift because it shares one target.
+
+### Live docs (supplement)
+
+The skill is pinned to 1.0.1, so for anything newer — release notes, changed
+APIs, new field types — consult the official documentation. Two project config
+files optionally declare the public `emdash-docs` docs MCP server, which is
+read-only and needs no token: `.mcp.json` for Claude Code and
+`.codex/config.toml` (`[mcp_servers.emdash-docs]`) for Codex. It is a supplement
+to the bundled skill, not a replacement, and setup can proceed without it.
+
+If the `emdash-docs` tools are callable in your session, use them. If they are
+not callable, do not stop and do not report the EmDash docs as unavailable:
+consult the official documentation directly at https://docs.emdashcms.com/ and
+continue. Codex loads project-scoped config only for a trusted repository, and a
+server added after a session started is not callable until a new session begins.
+
+The deployed-site MCP at `<your-deployment-origin>/_emdash/api/mcp` requires
+authentication and is configured per user/client; never place site MCP
+credentials, PATs, or write/admin scope configs in this repository.
 
 ## Cloudflare provisioning (deployment only)
 

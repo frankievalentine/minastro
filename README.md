@@ -10,7 +10,7 @@ upstream template source. Do that first. No Cloudflare account is needed for
 local work:
 
 ```bash
-bun create astro@latest my-site --template github:frankievalentine/minastro
+bun create astro@latest my-site --template github:frankievalentine/minastro --no-ai
 cd my-site
 bun install
 cp .dev.vars.example .dev.vars
@@ -18,8 +18,10 @@ cp .dev.vars.example .dev.vars
 bun run cf:dev
 ```
 
-`npx create-astro@latest my-site --template github:frankievalentine/minastro`
-works the same way if you prefer npm.
+`npx create-astro@latest my-site --template github:frankievalentine/minastro --no-ai`
+works the same way if you prefer npm. The `--no-ai` flag keeps Minastro's own
+`AGENTS.md` and bundled skill guidance instead of letting `create-astro`
+overwrite them with its generic AI stub.
 
 This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Before `cf:dev`, set the required `EMDASH_BOOTSTRAP_SECRET` local variable to a generated Base64URL value. Open the setup URL with the `bootstrap` query parameter once; the Worker replaces it with a signed HttpOnly cookie that lasts 15 minutes and redirects to a clean setup URL. The bootstrap URL credential remains reusable until the secret is manually revoked.
 
@@ -40,8 +42,15 @@ Set up my Minastro site from this scaffold. Operate in this standalone project
 directory only — this is my own new site created from the Minastro template,
 not the upstream template source directory; never edit or push to the template
 source.
-Read AGENTS.md first, and use the emdash-docs MCP server if available for
-current EmDash questions.
+Read AGENTS.md first. Then read the bundled EmDash skill at
+.agents/skills/building-emdash-site/SKILL.md and follow its references when a
+task needs them — it is version-pinned to the EmDash release this template
+installs (1.0.1) and is your primary reference for schema, seeds, content
+queries, Portable Text, and site features. Where that skill's generic
+instructions differ from this template, follow this repository: the seed lives
+at .emdash/seed.json, regenerate types with bun run types:generate, and run
+locally with bun run cf:dev. For anything newer than the pinned release,
+consult the official EmDash documentation at https://docs.emdashcms.com/.
 
 First, interview me so the site reflects my details. Collect and confirm two
 groups of information before building, and ask me for BOTH — do not skip either
@@ -142,8 +151,49 @@ The newsletter page is visible by default, but signup stays disabled until its o
 
 ## Advanced integrations
 
+### EmDash agent skill
+
+This template bundles EmDash's official `building-emdash-site` agent skill at
+`.agents/skills/building-emdash-site/SKILL.md`, together with its
+`references/` documents. It is version-pinned to the EmDash release this
+template installs (`emdash` 1.0.1 in `package.json`), so its guidance matches
+the runtime you actually get. A fresh scaffold created from this template
+contains it already — nothing extra to install.
+
+This is the primary reference for EmDash work in a scaffolded site. Point your
+agent at `SKILL.md`, and follow the repository's own conventions where the
+skill describes generic EmDash projects: the seed is `.emdash/seed.json`,
+types regenerate with `bun run types:generate`, and local runs use
+`bun run cf:dev`.
+
+Because the skill is pinned to the installed release, use the official
+documentation at https://docs.emdashcms.com/ for anything newer — release
+notes, changed APIs, or newly added features.
+
+The skill resolves for each agent client without installing anything: Codex and
+OpenCode both discover `.agents/skills` directly, Claude Code discovers it
+through the committed `.claude/skills` symlink to `.agents/skills`, and
+`AGENTS.md` also points agents at the same files. No skill registry install is
+required for any of them.
+
 ### EmDash MCP
 
-This repository commits one project MCP server, `emdash-docs` (`.mcp.json`), pointing at the official public EmDash documentation. It is read-only and requires no token.
+Optional supplement to the bundled skill, not a replacement; setup never
+depends on it. This repository optionally declares the public `emdash-docs`
+docs MCP server, which is read-only and needs no token, in:
+
+- `.mcp.json` — Claude Code project scope.
+- `.codex/config.toml` — Codex project scope, under `[mcp_servers.emdash-docs]`.
+
+Skill registries such as `skills.sh` install agent skills only — they cannot
+install or register an MCP server. Register the server through your client's own
+configuration.
+
+Codex loads project-scoped config only for a trusted repository. On first use in
+a new project, approve the trust prompt, then start a new session so the server
+is picked up; the tools are not callable in a session that was already running
+before the config was added. When the MCP tools are not callable, read
+https://docs.emdashcms.com/ directly instead of reporting the docs as
+unavailable.
 
 Your deployed site also exposes `<your-deployment-origin>/_emdash/api/mcp`, which can access live content. Configure it per user and per client — never commit it to this repository. Authenticate with OAuth/device flow or a locally stored personal access token, starting with the least-privilege `content:read` scope. Never commit PATs or write/admin credentials here, and verify the endpoint after deployment before relying on it.
