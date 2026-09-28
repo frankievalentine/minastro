@@ -4,16 +4,22 @@ A personal-site template built with Astro and [EmDash](https://emdashcms.com), r
 
 ## Quick start
 
-No Cloudflare account needed:
+EmDash themes are scaffolded with `create-astro`, which copies the template into
+a new standalone site project directory that you own and edit, separate from the
+upstream template source. Do that first. No Cloudflare account is needed for
+local work:
 
 ```bash
-git clone https://github.com/frankievalentine/minastro.git
-cd minastro
+bun create astro@latest my-site --template github:frankievalentine/minastro
+cd my-site
 bun install
 cp .dev.vars.example .dev.vars
 # Set EMDASH_BOOTSTRAP_SECRET in .dev.vars to a generated Base64URL value.
 bun run cf:dev
 ```
+
+`npx create-astro@latest my-site --template github:frankievalentine/minastro`
+works the same way if you prefer npm.
 
 This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Before `cf:dev`, set the required `EMDASH_BOOTSTRAP_SECRET` local variable to a generated Base64URL value. Open the setup URL with the `bootstrap` query parameter once; the Worker replaces it with a signed HttpOnly cookie that lasts 15 minutes and redirects to a clean setup URL. The bootstrap URL credential remains reusable until the secret is manually revoked.
 
@@ -26,19 +32,52 @@ This builds the site and runs the Worker locally on `http://localhost:8787` with
 
 ## Set up with an agent
 
-Open a coding agent in this clone and paste:
+Open a coding agent in your scaffolded site directory (the new project
+`create-astro` created, not the upstream template source) and paste:
 
 ```text
-Set up Minastro from this clone. Read AGENTS.md first, and use the emdash-docs
-MCP server if available for current EmDash questions. Work locally first:
-bun install, bun run check, bun run seed:validate, bun run build. Do not create
-Cloudflare resources, secrets, or deployments without my explicit approval.
-Before any production provisioning, ask me for my final canonical hostname and
-the explicitly approved Cloudflare account ID. Require an account-scoped
-CLOUDFLARE_API_TOKEN with the least-privilege scopes documented in
-docs/operations.md; never persist or log it. After I approve, follow AGENTS.md
-to configure and deploy, then complete /_emdash/admin/setup on that final origin
-only — never register the production passkey on a workers.dev origin.
+Set up my Minastro site from this scaffold. Operate in this standalone project
+directory only — this is my own new site created from the Minastro template,
+not the upstream template source directory; never edit or push to the template
+source.
+Read AGENTS.md first, and use the emdash-docs MCP server if available for
+current EmDash questions.
+
+First, interview me so the site reflects my details. Collect and confirm two
+groups of information before building, and ask me for BOTH — do not skip either
+group and do not assume defaults for either.
+
+1. Developer-owned presentation values for src/site.config.ts: the avatar to
+use; my location; my roles or short titles (e.g. "Software Engineer"); a short
+bio; my social links (GitHub, X/Twitter, LinkedIn, and a public contact email —
+I may skip any I do not use); whether to enable analytics and, if so, the script
+URL and domain; and whether to enable the newsletter signup and, if so, its
+sender address, Turnstile site key, expected hostname, consent version, and the
+short public description shown on the newsletter page. Leave analytics and the
+newsletter signup disabled (and their optional sub-fields, including the
+description, clear) unless I confirm I want them and give you the values —
+never invent placeholders like "yourusername" or "your-domain.com".
+
+2. CMS-owned site details: the site title, tagline, logo, and the primary
+navigation menu I want. These are owned by the EmDash CMS at runtime, not
+src/site.config.ts — never put them in site.config.ts. Apply the title, tagline,
+and primary menu through the bundled seed (which only initializes a fresh, empty
+database) or, on an already initialized site, through /_emdash/admin after the
+setup wizard; if you use the seed, edit .emdash/seed.json settings/menu and run
+bun run types:generate. Set the logo through /_emdash/admin, since the seed does
+not carry the uploaded logo media.
+
+Work locally first: bun install, bun run check, bun run seed:validate,
+bun run build. Keep site.config.ts at the local default (http://localhost:8787)
+until I give you my production hostname. Do not create Cloudflare resources,
+secrets, or deployments without my explicit approval. Before any production
+provisioning, ask me for my final canonical hostname and the explicitly approved
+Cloudflare account ID, then set site.config.ts:url to https://<hostname>.
+Require an account-scoped CLOUDFLARE_API_TOKEN with the least-privilege scopes
+documented in docs/operations.md; never persist or log it. After I approve,
+follow AGENTS.md to configure and deploy, then complete /_emdash/admin/setup on
+that final origin only — never register the production passkey on a workers.dev
+origin.
 ```
 
 You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.

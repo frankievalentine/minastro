@@ -25,7 +25,7 @@ directory resets local data. The committed `siteConfig.url` is
 `http://localhost:8787` — the functional local default that exactly matches
 this origin, including for local WebAuthn passkeys. It requires no configured
 remote bindings, no Cloudflare account, and no provisioning; localhost
-passkeys do not transfer to a deployed origin. A clone user must replace
+passkeys do not transfer to a deployed origin. A site owner must replace
 `siteConfig.url` with their canonical HTTPS URL before any production
 deployment; theme installation attaches no domain.
 
@@ -41,7 +41,7 @@ MCP credentials, PATs, or write/admin scope configs in this repository.
 
 Local development never needs this section: `bun run cf:dev` runs fully
 locally with simulated bindings. The steps below apply only when deploying a
-clone to Cloudflare.
+scaffolded site project to Cloudflare.
 
 For a new deployment, run `bunx wrangler whoami` first. Authenticate with
 `bunx wrangler login` if necessary, and confirm it targets the intended
@@ -59,14 +59,14 @@ conditions; registrar transfers and DNS hosted outside Cloudflare cannot be
 automated by this repository, so never assume an arbitrary external hostname
 can be attached.
 
-Run `bun run cloudflare:setup` only from the deployment clone and an interactive
-terminal so Wrangler can show any custom-domain or DNS conflict prompt. It
-creates the Worker, D1 database, R2 bucket, session KV namespace, and the
-`EMDASH_ENCRYPTION_KEY` secret; it then writes the Worker name and binding IDs
-to `wrangler.jsonc` and deploys the route/site URL configured above. Do not
-deploy while the placeholder IDs remain, and do not manually replace only some
-placeholders: the setup script rejects partially configured core bindings to
-prevent duplicate resources.
+Run `bun run cloudflare:setup` only from the scaffolded site project being
+deployed and an interactive terminal so Wrangler can show any custom-domain or
+DNS conflict prompt. It creates the Worker, D1 database, R2 bucket, session KV
+namespace, and the `EMDASH_ENCRYPTION_KEY` secret; it then writes the Worker
+name and binding IDs to `wrangler.jsonc` and deploys the route/site URL
+configured above. Do not deploy while the placeholder IDs remain, and do not
+manually replace only some placeholders: the setup script rejects partially
+configured core bindings to prevent duplicate resources.
 
 Wrangler 4.120 does not accept a `--json` flag on `wrangler d1 create`.
 Do not add that flag to D1 provisioning commands; use the currently supported

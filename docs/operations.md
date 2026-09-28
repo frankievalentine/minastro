@@ -58,15 +58,15 @@ Never provision, attach a domain, or deploy without explicit approval.
    `{ "pattern": "<HOSTNAME>", "custom_domain": true }` to `routes` in
    `wrangler.jsonc`.
 
-Run `bun run cloudflare:setup` only from the deployment clone in an interactive
-terminal. The command requires the approved account ID and token, verifies the
-account through the Cloudflare API, writes the account ID into the Wrangler
-configuration without storing the token, and binds every Wrangler operation to
-that configuration/account. It uses account APIs for R2 and KV discovery and
-never parses unsupported human-oriented list output. Do not deploy while
-placeholder IDs remain in `wrangler.jsonc`; the setup script rejects partial or
-unrecognized core bindings. Registrar transfers and DNS hosted outside
-Cloudflare cannot be automated here.
+Run `bun run cloudflare:setup` only from the scaffolded site project being
+deployed in an interactive terminal. The command requires the approved account
+ID and token, verifies the account through the Cloudflare API, writes the
+account ID into the Wrangler configuration without storing the token, and binds
+every Wrangler operation to that configuration/account. It uses account APIs
+for R2 and KV discovery and never parses unsupported human-oriented list
+output. Do not deploy while placeholder IDs remain in `wrangler.jsonc`; the
+setup script rejects partial or unrecognized core bindings. Registrar transfers
+and DNS hosted outside Cloudflare cannot be automated here.
 
 Before deployment, verify that `src/site.config.ts` contains the final HTTPS
 canonical origin. The script refuses to deploy without it and never uses a
