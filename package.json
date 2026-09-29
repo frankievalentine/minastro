@@ -110,13 +110,16 @@
       "picomatch": "2.3.2"
     },
     "devalue": "^5.9.1",
-    "fast-uri": "3.1.6",
+    "fast-uri": "3.1.8",
     "hono": "4.13.5",
+    "ip-address": "10.6.0",
     "js-yaml": "4.3.2",
     "qs": "6.16.0",
     "sanitize-html": "2.17.7",
     "sharp": "0.35.4",
     "smol-toml": "1.8.0",
-    "svgo": "4.1.0"
+    "svgo": "4.1.0",
+    "undici@^7": "7.29.1",
+    "undici@^8": "8.11.2"
   }
 }
