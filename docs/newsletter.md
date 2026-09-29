@@ -103,7 +103,11 @@ Before accepting that phase, complete these account-level prerequisites:
 
 1. Onboard the sender domain in Cloudflare Email Sending, including its required DNS records. Onboarding the domain is the only sender prerequisite; the individual sender address is not separately verified or approved.
 2. Create a Turnstile widget for the newsletter hostname and have its public site key and private secret ready. The command accepts the secret through no-echo input and never writes it to the repository or journal.
-3. Obtain a positive Cloudflare Workers Rate Limiting namespace ID for `NEWSLETTER_SUBSCRIBE_LIMITER`.
+3. Choose a positive integer `namespace_id` for `NEWSLETTER_SUBSCRIBE_LIMITER`, unique among the
+   rate-limit namespaces used in the account. There is no dashboard resource to create: the
+   binding declares the ID itself. See the Cloudflare
+   [Rate Limiting binding documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+   for the binding shape.
 
 The setup command sends only double-opt-in confirmation emails. It does not configure or send bulk newsletter campaigns. Optional Resend synchronization places confirmed subscribers in a Resend Segment; create and send Broadcasts in Resend.
 

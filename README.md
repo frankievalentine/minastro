@@ -45,6 +45,56 @@ This builds the site and runs the Worker locally on `http://localhost:8787` with
 
 `bun run dev` runs Astro alone and does not provide the bindings EmDash needs — use `cf:dev` for full-stack work.
 
+## Production prerequisites
+
+Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.12.0 or later on an even-numbered release line (see [Astro's install and setup guide](https://docs.astro.build/en/install-and-setup/)), and `bun run build` launches Node. This repo installs Wrangler itself (`wrangler` is a devDependency), so there is no global Wrangler install. The Cloudflare items below apply only to deployment, and the newsletter items only if you opt in.
+
+**Cloudflare deployment** — have these ready before you deploy:
+
+- **Final HTTPS hostname** (for example `https://example.com`) that already lives in an active Cloudflare DNS zone owned by the account you will deploy into. The setup script rejects `workers.dev`, non-HTTPS, and localhost origins.
+- **Approved Cloudflare account ID** — the 32-character hexadecimal ID of the account you explicitly choose.
+- **Explicit approval** to create resources (Worker, D1, R2, KV, and newsletter resources if enabled), attach the custom domain, and deploy.
+- **Account-scoped Cloudflare API token**, scoped to that account and zone, with exactly these setup permissions:
+  - Account: Account Settings Read, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit, Workers Scripts Edit.
+  - Zone: Workers Routes Edit (required for the production custom domain).
+  - Create it with [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/); permission names are listed in the [API permissions reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
+- **Token file workflow.** Create the ignored local file from the tracked example:
+
+  ```sh
+  install -m 600 .env.cloudflare.local.example .env.cloudflare.local
+  ```
+
+  Fill in the token and account ID in your editor, and confirm the resource, deployment, and custom-domain approval. Only then run setup:
+
+  ```sh
+  bun run --env-file=.env.cloudflare.local cloudflare:setup
+  ```
+
+  Never put the token in chat or on a command line. The file is plaintext on disk until you delete it; delete it and revoke the token after a successful setup.
+- **An interactive terminal** for the setup run — Wrangler prompts about custom-domain and DNS conflicts, so do not run setup detached.
+- **A password manager** ready to store the secrets setup generates: `EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET`. An existing site requires its original encryption key, so keep it safe.
+
+**Site interview** — your agent can propose these and confirm them with you, so you do not need every value decided up front:
+
+- CMS-owned details: site title, tagline, primary navigation, and the logo image. Upload the logo in `/_emdash/admin` after the wizard; the seed does not carry uploaded media.
+- Developer-owned details in `src/site.config.ts`: avatar, bio, location, roles, public contact email, social links, and your analytics choice — Cloudflare Web Analytics (recommended), another provider, or none. Cloudflare Web Analytics needs no repo token and is switched on in the dashboard after deployment; any other provider needs its account or site plus the script URL and snippet details you want loaded.
+- Local EmDash setup is **not** a production prerequisite. You may run `bun run build` and `bun run check` locally at any time, but the production passkey is registered only on the final HTTPS hostname after deployment.
+
+**Newsletter (opt in only)** — skip this unless you want signups:
+
+- Onboard your sending domain in [Cloudflare Email Service](https://developers.cloudflare.com/email-service/configuration/domains/) with its DNS records ready. Onboarding the domain is the only sender prerequisite; the individual sender address is not separately verified, so pick any address at that onboarded domain.
+- Choose the sender address, consent version, and public description.
+- Create a [Turnstile widget](https://developers.cloudflare.com/turnstile/get-started/widget-management/dashboard/) for the final hostname and keep both the public site key and the private secret key. Setup reads the secret through masked input and never writes it to the repository.
+- Choose a `namespace_id` for `NEWSLETTER_SUBSCRIBE_LIMITER`: any positive integer that is unique for the account. Per the [Rate Limiting binding docs](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/), there is no dashboard resource to create.
+- Create a `NEWSLETTER_ADMIN_TOKEN` of at least 32 characters in your password manager; setup prompts for the saved value.
+- Optional: a Resend Segment ID and API key, only if you want Resend segment synchronization.
+
+**After deployment**
+
+- Register the production passkey through `/_emdash/admin/setup` on the final HTTPS hostname. Never register it on a `workers.dev` origin.
+- Upload the logo in `/_emdash/admin`.
+- Turn on Cloudflare Web Analytics in the dashboard for that zone, or configure the provider you chose.
+
 ## Set up with an agent
 
 Open a coding agent in your scaffolded site directory (the new project
@@ -188,7 +238,7 @@ If you prefer a different provider, or none at all, that is fully supported:
 
 ## Newsletter
 
-The newsletter page is visible by default, but signup stays disabled until its opt-in integration is provisioned (verified Email Sending domain, Turnstile keys, and a Rate Limiting namespace). See [docs/newsletter.md](docs/newsletter.md) for architecture, configuration, and operations.
+The newsletter page is visible by default, but signup stays disabled until its opt-in integration is provisioned (an onboarded Email Sending domain with DNS, a Turnstile site key and secret, a rate-limit namespace ID, and a `NEWSLETTER_ADMIN_TOKEN`). See [Production prerequisites](#production-prerequisites) and [docs/newsletter.md](docs/newsletter.md) for architecture, configuration, and operations.
 
 ## Advanced integrations
 

@@ -46,9 +46,9 @@ Never provision, attach a domain, or deploy without explicit approval.
    that it is the intended account.
 2. Supply an account-scoped `CLOUDFLARE_API_TOKEN` for this setup run. The token
    must have only the permissions required for this setup: Account Settings
-   Read, D1 Edit, R2 Storage Edit, Workers KV Storage Edit, and Workers Scripts
-   Edit. Add Workers Routes Edit only when the approved configuration attaches a
-   custom route.
+   Read, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit, and Workers
+   Scripts Edit. Workers Routes Edit is also required for a standard production
+   deployment, because setup attaches the custom domain.
 
    Preferred: create the ignored `.env.cloudflare.local` from the tracked
    example without copying any secrets by hand, then fill in

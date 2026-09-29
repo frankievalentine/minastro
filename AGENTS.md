@@ -86,10 +86,16 @@ Local development never needs this section: `bun run cf:dev` runs fully
 locally with simulated bindings. The steps below apply only when deploying a
 scaffolded site project to Cloudflare.
 
-For a new deployment, run `bunx wrangler whoami` first. Authenticate with
-`bunx wrangler login` if necessary, and confirm it targets the intended
-Cloudflare account with permission to create Workers, D1 databases, R2 buckets,
-KV namespaces, and Worker secrets.
+Confirm the deployment targets the intended Cloudflare account with permission to
+create Workers, D1 databases, R2 buckets, KV namespaces, and Worker secrets.
+Setup authenticates with the account-scoped `CLOUDFLARE_API_TOKEN` from the
+environment and verifies that token against the approved account itself, so a
+separate `bunx wrangler login` is not required for a token-based provisioning
+run. Running `bunx wrangler whoami` is optional; if you use it, load the same
+token from the ignored `.env.cloudflare.local`
+(`bun run --env-file=.env.cloudflare.local wrangler whoami`) and never paste or
+export the value on the command line, so it reports the token's identity instead
+of prompting for an unrelated OAuth login.
 
 Before provisioning, ask the user for their final canonical hostname. Confirm
 with them that the hostname lives in an active Cloudflare zone owned by that
