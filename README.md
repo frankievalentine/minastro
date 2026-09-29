@@ -98,9 +98,9 @@ Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.
 
 ## Set up with an agent
 
-Open a coding agent in your scaffolded site directory (the new project `create-astro` created, not the upstream template source), expand the prompt below, and paste it:
+Open a coding agent in your scaffolded site directory (the new project `create-astro` created, not the upstream template source), copy the prompt below, and paste it:
 
-<details>
+<details open>
 <summary>Copy the agent setup prompt</summary>
 
 ```text
