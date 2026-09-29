@@ -2,6 +2,19 @@
 
 A personal-site theme built with Astro and [EmDash](https://emdashcms.com), running server-side on Cloudflare Workers. EmDash is a Git-free CMS that stores your content in Cloudflare D1 and media in R2, so everything — posts, projects, pages, settings — is editable from a built-in admin at `/_emdash/admin`. Out of the box you get a blog, a project portfolio, CMS-managed pages, search, RSS, tags, comments, and an optional newsletter.
 
+## Features
+
+- **CMS-backed blog and portfolio** — posts and projects are authored in the EmDash admin and queried at runtime; no local content files or rebuilds.
+- **CMS-managed pages** — root pages render at `/{slug}` and can be added to the primary navigation.
+- **Built-in admin** — author, edit, and publish at `/_emdash/admin`, including tags, featured flags, and optional comments.
+- **Content search** — search posts and projects from a dialog, backed by `/_emdash/api/search`.
+- **RSS and SEO endpoints** — `/rss.xml`, plus runtime-owned `/robots.txt` and `/sitemap.xml`.
+- **Shiki code blocks** — syntax highlighting for Portable Text code blocks in light and dark themes.
+- **Presentation config** — bio, avatar, location, roles, and social links in `src/site.config.ts`; navigation stays CMS-managed.
+- **Cloudflare-native deployment** — server-rendered on Workers with D1 for content and R2 for media, with scripts for local Worker development and Cloudflare deployment.
+- **Analytics** — recommended Cloudflare Web Analytics setup after deployment, or an optional custom provider.
+- **Optional newsletter** — a public signup page, confirm/unsubscribe flow, and admin CSV export, enabled only when you provision it.
+
 ## Quick start
 
 EmDash themes are scaffolded with `create-astro`, which copies the template into
