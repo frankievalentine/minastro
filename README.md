@@ -101,10 +101,16 @@ secrets, or deployments without my explicit approval. Before any production
 provisioning, ask me for my final canonical hostname and the explicitly approved
 Cloudflare account ID, then set site.config.ts:url to https://<hostname>.
 Require an account-scoped CLOUDFLARE_API_TOKEN with the least-privilege scopes
-documented in docs/operations.md; never persist or log it. After I approve,
-follow AGENTS.md to configure and deploy, then complete /_emdash/admin/setup on
-that final origin only — never register the production passkey on a workers.dev
-origin.
+documented in docs/operations.md. Have me put the token and the account ID into
+an ignored .env.cloudflare.local copied from .env.cloudflare.local.example and
+kept at mode 0600, then run provisioning as
+`bun run --env-file=.env.cloudflare.local cloudflare:setup`. Never ask me to
+paste a token into chat or into a command, never read, print, or commit the
+value, and have me delete the file and revoke the token once setup is complete
+and no retry is pending. Exporting the two variables into the shell for the run
+remains an accepted alternative. After I approve, follow AGENTS.md to configure
+and deploy, then complete /_emdash/admin/setup on that final origin only — never
+register the production passkey on a workers.dev origin.
 ```
 
 You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.
@@ -152,7 +158,7 @@ Local development uses `bun run cf:dev`; production deploys use `bun run cf:depl
 | `bun run check` | Type-check and lint |
 | `bun run seed:validate` | Validate `.emdash/seed.json` |
 | `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` |
-| `bun run cloudflare:setup` | Provision with an approved account-scoped token and safely resume the prepared-version deployment |
+| `bun run --env-file=.env.cloudflare.local cloudflare:setup` | Provision with an approved account-scoped token from the ignored `.env.cloudflare.local` and safely resume the prepared-version deployment |
 | `bun run test:setup` | Run failure-injection tests for resumable provisioning |
 | `bun run smoke:worker` | Start isolated local Worker bindings and smoke-test setup/runtime boundaries |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |

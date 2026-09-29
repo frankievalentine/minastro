@@ -44,12 +44,37 @@ Never provision, attach a domain, or deploy without explicit approval.
 
 1. Obtain the explicitly approved 32-character Cloudflare account ID and confirm
    that it is the intended account.
-2. Export an account-scoped `CLOUDFLARE_API_TOKEN` for this terminal only. The
-   token must have only the permissions required for this setup: Account Settings
+2. Supply an account-scoped `CLOUDFLARE_API_TOKEN` for this setup run. The token
+   must have only the permissions required for this setup: Account Settings
    Read, D1 Edit, R2 Storage Edit, Workers KV Storage Edit, and Workers Scripts
    Edit. Add Workers Routes Edit only when the approved configuration attaches a
-   custom route. Never put the token in `wrangler.jsonc`, `.dev.vars`, the
-   journal, shell commands, or logs.
+   custom route.
+
+   Preferred: create the ignored `.env.cloudflare.local` from the tracked
+   example without copying any secrets by hand, then fill in
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in your editor and let
+   the run load it:
+
+   ```sh
+   install -m 600 .env.cloudflare.local.example .env.cloudflare.local
+   ```
+
+   ```sh
+   bun run --env-file=.env.cloudflare.local cloudflare:setup
+   ```
+
+   This is opt-in and stores the account-scoped token in plaintext on disk until
+   you delete the file; mode 0600 keeps it readable by your user only. Treat it
+   as throwaway state. The file is loaded into that command's environment only.
+   Never paste the token into a chat message or a command line, and never let
+   the value reach `wrangler.jsonc`, `.dev.vars`, the journal, committed files,
+   or logs. The setup script reads the variables from the environment and never
+   reads or stores the file itself. Exporting `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_ACCOUNT_ID` into the terminal for the run remains an accepted
+   alternative that writes no file at all.
+
+   Once setup succeeds and no retry is pending, delete `.env.cloudflare.local`
+   and revoke or delete the token in Cloudflare.
 3. Confirm the final canonical hostname with the site owner and verify it lives
    in an active Cloudflare zone owned by that account.
 4. Obtain explicit approval before creating resources, attaching the custom
@@ -75,10 +100,20 @@ normal prompts and output.
 
 Provisioning is resumable. The command writes only non-secret state to an
 atomic journal under `.wrangler/provisioning/` and revalidates every remote
-resource before continuing. It first uploads and verifies a protected Worker
-version without deploying application traffic, adds secrets through
-`wrangler versions secret put`, applies and verifies migrations, and finally
-deploys exactly that prepared version at 100% traffic. It then runs the
+resource before continuing.
+
+On a genuinely new Worker, Wrangler's `versions upload` needs one prior
+deployment to exist, so setup first deploys an inert base Worker: a generated
+`503` responder whose private bootstrap config sets `workers_dev: false` and
+`preview_urls: false` with no routes, triggers, or assets. This one-time step
+serves no site content and is never publicly reachable; it is only a
+prerequisite for versioning, and setup verifies the deployment exists remotely
+before continuing.
+
+It then builds the real Astro output, uploads the prepared version against
+`dist/server/wrangler.json` rather than the root template config, adds secrets
+through `wrangler versions secret put`, applies and verifies migrations, and
+finally deploys exactly that prepared version at 100% traffic. It then runs the
 separate interactive `wrangler triggers deploy` phase for the reconciled custom
 domain, route, and cron triggers before verifying the deployment identity,
 bindings, custom-domain attachment, and canonical origin. An uninitialized site

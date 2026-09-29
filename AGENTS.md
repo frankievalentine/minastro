@@ -102,9 +102,26 @@ conditions; registrar transfers and DNS hosted outside Cloudflare cannot be
 automated by this repository, so never assume an arbitrary external hostname
 can be attached.
 
-Run `bun run cloudflare:setup` only from the scaffolded site project being
-deployed and an interactive terminal so Wrangler can show any custom-domain or
-DNS conflict prompt. It creates the Worker, D1 database, R2 bucket, session KV
+Prefer the user's ignored local env file over chat for credentials, since
+exported variables remain an accepted alternative: have the user copy the
+tracked `.env.cloudflare.local.example` to `.env.cloudflare.local` at mode
+0600, fill in `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and run
+`bun run --env-file=.env.cloudflare.local cloudflare:setup`. Never ask the user
+to paste a token into the conversation or into a command line, and never read,
+print, echo, or commit the file's value; the setup script reads the variables
+from the process environment. After a successful setup with no retry pending,
+have the user delete `.env.cloudflare.local` and revoke or delete the token in
+Cloudflare.
+
+Run that setup command only from the scaffolded site project being deployed and
+an interactive terminal so Wrangler can show any custom-domain or DNS conflict
+prompt. On a fresh Worker it first deploys an inert private base Worker
+(`workers_dev: false`, no routes, triggers, or assets; it answers only `503`),
+because Wrangler's `versions upload` requires one prior deployment. That step is
+a versioning prerequisite, not a public site deployment: the real Astro output
+is built and uploaded as a version afterward, then deployed at 100% traffic,
+and only the later `wrangler triggers deploy` phase attaches the custom domain.
+The command creates the Worker, D1 database, R2 bucket, session KV
 namespace, and the `EMDASH_ENCRYPTION_KEY` secret; it then writes the Worker
 name and binding IDs to `wrangler.jsonc` and deploys the route/site URL
 configured above. Do not deploy while the placeholder IDs remain, and do not
@@ -115,11 +132,15 @@ Wrangler 4.120 does not accept a `--json` flag on `wrangler d1 create`.
 Do not add that flag to D1 provisioning commands; use the currently supported
 machine-readable output or a documented API response instead.
 
-Secrets are stored in Cloudflare, never committed. `.dev.vars` is ignored and
-is only for local development; it cannot create Cloudflare bindings. The
-newsletter setup is optional and needs an onboarded Email Sending domain,
-Turnstile keys, and a Rate Limiting namespace. Skip it unless those values are
-available and the deployment explicitly includes newsletter signup.
+Worker secrets are stored in Cloudflare and never committed.
+`.env.cloudflare.local` is a different thing: an ignored, operator-owned
+plaintext file holding the account-scoped setup token for the interactive
+provisioning run only, which must never be committed or reused as a Worker
+binding. `.dev.vars` is ignored and is only for local development; it cannot
+create Cloudflare bindings either. The newsletter setup is optional and needs
+an onboarded Email Sending domain, Turnstile keys, and a Rate Limiting
+namespace. Skip it unless those values are available and the deployment
+explicitly includes newsletter signup.
 
 Email Sending domain onboarding is the only sender prerequisite. A domain must
 be onboarded (with its required DNS records) before its addresses can send, but
