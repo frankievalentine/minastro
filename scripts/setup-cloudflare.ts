@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   JOURNAL_DIRECTORY,
@@ -225,12 +225,15 @@ function defaultRuntime(readline: ReturnType<typeof createInterface>): SetupRunt
         stdout: "pipe",
         stderr: "pipe",
       });
-      const [exitCode, stdout, _stderr] = await Promise.all([
+      const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ]);
-      if (exitCode !== 0) throw new Error(`${command.join(" ")} failed.`);
+      if (exitCode !== 0) {
+        const code = cloudflareErrorCode(stderr);
+        throw new Error(`${command.join(" ")} failed.${code ? ` [code: ${code}]` : ""}`);
+      }
       if (!options.quiet && stdout.trim()) console.log(stdout.trim());
       return stdout.trim();
     },
@@ -281,6 +284,17 @@ function arrayOutput(output: string, label: string): Record<string, unknown>[] {
   });
 }
 
+// Wrangler writes Cloudflare API failures to stderr as `[code: <n>]`; keep only the numeric code.
+function cloudflareErrorCode(text: string): string | null {
+  return text.match(/\[code:\s*(\d+)\]/)?.[1] ?? null;
+}
+
+const WORKER_NOT_FOUND_CODE = "10007";
+
+function isMissingWorkerError(error: unknown): boolean {
+  return error instanceof Error && cloudflareErrorCode(error.message) === WORKER_NOT_FOUND_CODE;
+}
+
 function accountId(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(normalized)) throw new Error("The approved Cloudflare account ID must be a 32-character hexadecimal ID.");
@@ -302,8 +316,8 @@ async function verifyAccount(runtime: SetupRuntime, id: string) {
   if ((body as { success?: unknown } | null)?.success !== true || returnedId !== id) throw new Error("The Cloudflare API token does not grant access to the approved account ID.");
 }
 
-function wranglerCommand(root: string, args: string[]) {
-  return ["bunx", "wrangler", "--config", join(root, "wrangler.jsonc"), ...args];
+function wranglerCommand(root: string, args: string[], configPath?: string) {
+  return ["bunx", "wrangler", "--config", configPath ?? join(root, "wrangler.jsonc"), ...args];
 }
 
 function wranglerOptions(runtime: SetupRuntime, account: string, options: CommandOptions = {}): CommandOptions {
@@ -317,6 +331,10 @@ async function runWrangler(runtime: SetupRuntime, root: string, account: string,
 
 async function runWranglerInteractive(runtime: SetupRuntime, root: string, account: string, args: string[], options: CommandOptions = {}) {
   return runtime.runInteractive(wranglerCommand(root, args), wranglerOptions(runtime, account, options));
+}
+
+async function runWranglerInteractiveWithConfig(runtime: SetupRuntime, root: string, account: string, configPath: string, args: string[], options: CommandOptions = {}) {
+  return runtime.runInteractive(wranglerCommand(root, args, configPath), wranglerOptions(runtime, account, options));
 }
 
 function canonicalOriginFromSource(source: string): string | null {
@@ -515,7 +533,7 @@ function createResourceJournal(name: string, id?: string): ResourceJournal {
   return { intendedName: name, id, status: "pending", createAttempted: false, adopted: false };
 }
 
-async function apiList(runtime: SetupRuntime, account: string, endpoint: string, label: string): Promise<Record<string, unknown>[]> {
+async function apiList(runtime: SetupRuntime, account: string, endpoint: string, label: string, perPage = 1000): Promise<Record<string, unknown>[]> {
   if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for account API operations.");
   if (!endpoint.startsWith(`/accounts/${account}/`)) throw new Error(`Cloudflare account API endpoint is outside the approved account for ${label}.`);
   const resources: Record<string, unknown>[] = [];
@@ -523,7 +541,7 @@ async function apiList(runtime: SetupRuntime, account: string, endpoint: string,
     let body: unknown;
     try {
       const separator = endpoint.includes("?") ? "&" : "?";
-      const response = await runtime.apiFetch(`${CLOUDFLARE_API}${endpoint}${separator}page=${page}&per_page=1000`, { headers: { Authorization: `Bearer ${runtime.apiToken}` } });
+      const response = await runtime.apiFetch(`${CLOUDFLARE_API}${endpoint}${separator}page=${page}&per_page=${perPage}`, { headers: { Authorization: `Bearer ${runtime.apiToken}` } });
       body = await response.json();
       if (!response.ok) throw new Error();
     } catch {
@@ -573,6 +591,35 @@ async function listR2(runtime: SetupRuntime, account: string): Promise<Resource[
 
 async function listKv(runtime: SetupRuntime, account: string): Promise<Resource[]> {
   return (await apiList(runtime, account, `/accounts/${account}/storage/kv/namespaces`, "KV namespace list")).map((entry) => ({ id: String(entry.id ?? ""), name: String(entry.title ?? "") }));
+}
+
+async function listWorkers(runtime: SetupRuntime, account: string): Promise<Resource[]> {
+  // Cloudflare caps the Workers list endpoint at per_page=100; a larger value is rejected.
+  return (await apiList(runtime, account, `/accounts/${account}/workers/workers`, "Worker list", 100))
+    .map((entry) => ({ id: stringField(entry, "id") ?? "", name: stringField(entry, "name") ?? "" }));
+}
+
+async function createWorker(runtime: SetupRuntime, account: string, name: string): Promise<void> {
+  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for account API operations.");
+  let response: Response;
+  try {
+    response = await runtime.apiFetch(`${CLOUDFLARE_API}/accounts/${account}/workers/workers`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${runtime.apiToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+  } catch {
+    throw new Error("The Cloudflare API Worker create request did not complete; discovery will resolve whether it was created.");
+  }
+  if (!response.ok) throw new Error(`The Cloudflare API Worker create request failed with status ${response.status}.`);
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("The Cloudflare API Worker create response was not valid JSON; the create outcome is unresolved.");
+  }
+  const result = typeof body === "object" && body !== null ? (body as { success?: unknown; result?: unknown }).result : undefined;
+  if ((body as { success?: unknown } | null)?.success !== true || typeof result !== "object" || result === null) throw new Error("The Cloudflare API Worker create response did not confirm the created Worker; discovery will resolve whether it was created.");
 }
 
 async function resolveJournalResource(
@@ -1029,7 +1076,9 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
   }
   try {
     await runtime.runInteractive(["bun", "run", "build"], { env: { CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } });
-    await runWranglerInteractive(runtime, root, account, ["versions", "upload", "--name", plan.workerName, "--tag", prepared.tag, "--message", prepared.tag], {});
+    const builtConfig = join(root, "dist/server/wrangler.json");
+    if (await runtime.fs.read(builtConfig) === null) throw new Error("The Astro build did not produce dist/server/wrangler.json; refusing to upload with the template config.");
+    await runWranglerInteractiveWithConfig(runtime, root, account, builtConfig, ["versions", "upload", "--name", plan.workerName, "--tag", prepared.tag, "--message", prepared.tag], {});
   } catch {
     throw new Error("Prepared version upload failed or is ambiguous; rerun setup to inspect the persisted version tag before retrying.");
   }
@@ -1101,6 +1150,86 @@ async function establishWorker(runtime: SetupRuntime, journal: ProvisioningJourn
     if (!journal.milestones.deployed && journal.deployment) throw new Error("The existing Worker deployment could not be verified; no application code was deployed automatically.");
     return null;
   }
+}
+
+async function ensureWorkerResource(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, account: string, plan: Plan) {
+  await resolveJournalResource(runtime, journal, journalPath, "worker", {
+    kind: "Worker",
+    intendedName: plan.workerName,
+    list: () => listWorkers(runtime, account),
+    identity: (resource) => resource,
+    create: () => createWorker(runtime, account, plan.workerName),
+  });
+}
+
+function bootstrapConfigPath(journalPath: string, workerName: string) {
+  return join(dirname(journalPath), `${normalizeName(workerName)}-bootstrap.jsonc`);
+}
+
+async function hasLiveDeployment(runtime: SetupRuntime, root: string, account: string, workerName: string): Promise<boolean> {
+  let output: string;
+  try {
+    output = await runWrangler(runtime, root, account, ["deployments", "list", "--name", workerName, "--json"], { quiet: true });
+  } catch (error) {
+    // A metadata-only Worker has no script yet, so Wrangler reports the missing script (10007) here
+    // instead of an empty deployment list. Every other failure stays fail-closed.
+    if (isMissingWorkerError(error)) return false;
+    throw error;
+  }
+  const deployments = deploymentEntries(output);
+  return deployments.some((deployment) => {
+    const traffic = deploymentTraffic(deployment);
+    return traffic.some((allocation) => allocation.percentage > 0);
+  });
+}
+
+async function ensureBaseWorkerDeployment(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, root: string, account: string, plan: Plan) {
+  if (journal.milestones.workerBootstrapDeployed) return;
+  if (!journal.milestones.workerBootstrapPending) {
+    if (await hasLiveDeployment(runtime, root, account, plan.workerName)) {
+      journal.milestones.workerBootstrapDeployed = true;
+      await save(runtime, journalPath, journal);
+      return;
+    }
+    journal.milestones.workerBootstrapPending = true;
+    await save(runtime, journalPath, journal);
+  } else if (await hasLiveDeployment(runtime, root, account, plan.workerName)) {
+    journal.milestones.workerBootstrapPending = false;
+    journal.milestones.workerBootstrapDeployed = true;
+    await save(runtime, journalPath, journal);
+    return;
+  }
+  const bootstrapDirectory = dirname(journalPath);
+  const configPath = bootstrapConfigPath(journalPath, plan.workerName);
+  const bootstrapConfig = JSON.stringify({
+    name: plan.workerName,
+    main: "./bootstrap.mjs",
+    compatibility_date: "2026-03-02",
+    account_id: account,
+    workers_dev: false,
+    preview_urls: false,
+  }, null, 2);
+  if (await runtime.fs.read(configPath) !== bootstrapConfig) await runtime.fs.writeAtomic(configPath, bootstrapConfig);
+  const scriptPath = join(bootstrapDirectory, "bootstrap.mjs");
+  const script = "export default { async fetch() { return new Response(null, { status: 503 }); } };\n";
+  if (await runtime.fs.read(scriptPath) !== script) await runtime.fs.writeAtomic(scriptPath, script);
+  try {
+    await runWranglerInteractiveWithConfig(runtime, root, account, configPath, ["deploy"], {});
+  } catch {
+    if (await hasLiveDeployment(runtime, root, account, plan.workerName)) {
+      journal.milestones.workerBootstrapPending = false;
+      journal.milestones.workerBootstrapDeployed = true;
+      await save(runtime, journalPath, journal);
+      return;
+    }
+    throw new Error("The inert base Worker deployment did not complete and no deployment was verified remotely; rerun setup to resume it.");
+  }
+  if (!await hasLiveDeployment(runtime, root, account, plan.workerName)) {
+    throw new Error("The inert base Worker deployment reported success but no deployment was verified remotely; the bootstrap remains pending, so rerun setup to resume it.");
+  }
+  journal.milestones.workerBootstrapPending = false;
+  journal.milestones.workerBootstrapDeployed = true;
+  await save(runtime, journalPath, journal);
 }
 
 async function verifyCanonicalOrigin(runtime: SetupRuntime, account: string, plan: Plan, path: string, expectSetupRedirect: boolean, triggersDeployed: boolean) {
@@ -1273,6 +1402,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     await save(runtime, path, journal);
 
     const expectedBindings = requiredBindings(plan, { coreD1, media, session, newsletterDb });
+    await ensureWorkerResource(runtime, journal, path, approvedAccount, plan);
     await establishWorker(runtime, journal, path, root, approvedAccount, plan, expectedBindings);
     const currentState = await inspectDatabaseInitialization(runtime, root, approvedAccount, plan.d1Name);
     plan.cmsState = databaseStateLabel(currentState);
@@ -1288,6 +1418,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     const needsDeployment = journal.pending.deployment || plan.newCore || (plan.newsletter.enabled && !journal.milestones.newsletterMigration);
     let bootstrapSecret: string | undefined;
     if (needsDeployment) {
+      await ensureBaseWorkerDeployment(runtime, journal, path, root, approvedAccount, plan);
       await prepareVersion(runtime, journal, path, root, approvedAccount, plan, expectedBindings);
       let names = await secretNames(runtime, root, approvedAccount, plan, journal.preparedVersion?.versionId ?? "", expectedBindings);
       const legacy = plan.newsletter.enabled && plan.resend.enabled && !plan.newsletter.newFeature;

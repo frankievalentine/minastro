@@ -24,6 +24,7 @@ import { promptSecretDetached, runProvisioning, type SetupRuntime } from "./setu
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const ROOT = "/fake-project";
 const WORKER = "example";
+const WORKER_ID = "aaaaaaaa111122223333444455555666";
 const MIGRATIONS = ["0001_newsletter.sql", "0002_resend_outbox.sql", "0003_resend_quarantine.sql", "0004_newsletter_erasure.sql"];
 
 const actualWranglerConfig = await readFile(join(import.meta.dir, "..", "wrangler.jsonc"), "utf8");
@@ -71,6 +72,11 @@ interface FakeOptions {
   canonicalAttachment?: "correct" | "missing" | "wrong";
   r2Pagination?: boolean;
   failTriggers?: number;
+  failWorkerCreateResponse?: number;
+  workerCreateNeverLands?: boolean;
+  failBootstrapDeploy?: number;
+  bootstrapDeployNeverLands?: boolean;
+  failDeploymentsList?: number;
   originMode?: "setup" | "ok" | "cross-origin" | "wrong-path" | "loop" | "bad-status";
 }
 
@@ -81,6 +87,8 @@ class FakeRuntime implements SetupRuntime {
   readonly commands: string[][] = [];
   readonly interactiveCommands: string[][] = [];
   readonly apiUrls: string[] = [];
+  readonly writeRequests: Array<{ url: string; method: string }> = [];
+  readonly events: string[] = [];
   readonly originUrls: string[] = [];
   readonly prompts: string[] = [];
   readonly secretPrompts: string[] = [];
@@ -100,8 +108,15 @@ class FakeRuntime implements SetupRuntime {
   canonicalAttachment: "correct" | "missing" | "wrong";
   r2Pagination: boolean;
   failTriggers: number;
+  failWorkerCreateResponse: number;
+  workerCreateNeverLands: boolean;
+  failBootstrapDeploy: number;
+  bootstrapDeployNeverLands: boolean;
+  failDeploymentsList: number;
   originMode: NonNullable<FakeOptions["originMode"]>;
   triggersDeployed = false;
+  workerExists = false;
+  scriptExists = false;
   failD1Create: boolean;
   failVersionUpload: number;
   failDeployment: number;
@@ -120,6 +135,11 @@ class FakeRuntime implements SetupRuntime {
     this.canonicalAttachment = options.canonicalAttachment ?? "correct";
     this.r2Pagination = options.r2Pagination ?? false;
     this.failTriggers = options.failTriggers ?? 0;
+    this.failWorkerCreateResponse = options.failWorkerCreateResponse ?? 0;
+    this.workerCreateNeverLands = options.workerCreateNeverLands ?? false;
+    this.failBootstrapDeploy = options.failBootstrapDeploy ?? 0;
+    this.bootstrapDeployNeverLands = options.bootstrapDeployNeverLands ?? false;
+    this.failDeploymentsList = options.failDeploymentsList ?? 0;
     this.originMode = options.originMode ?? (this.databaseEstablished ? "ok" : "setup");
     let config = options.config ?? actualWranglerConfig;
     let site = options.site ?? actualSiteConfig;
@@ -154,6 +174,7 @@ class FakeRuntime implements SetupRuntime {
     this.fs.files.set(join(ROOT, "wrangler.jsonc"), config);
     this.fs.files.set(join(ROOT, "src/site.config.ts"), site);
     this.fs.files.set(join(ROOT, "src/lib/bootstrap-protection.ts"), "export function protectFirstAdminBootstrap() {}\n");
+    this.fs.files.set(join(ROOT, "dist/server/wrangler.json"), JSON.stringify({ name: WORKER, main: "entry.mjs" }));
     this.fs.directories.set(join(ROOT, "newsletter-migrations"), MIGRATIONS);
     this.answers = [];
     this.secretAnswers = [];
@@ -167,6 +188,8 @@ class FakeRuntime implements SetupRuntime {
       this.versions.push({ id: "version-1", tag: "existing", createdOn: "2026-01-01T00:00:01Z", secrets: new Set(this.secrets) });
       this.deployments.push({ id: "deployment-1", createdOn: "2026-01-01T00:00:02Z", versionId: "version-1" });
       this.secrets.add("EMDASH_ENCRYPTION_KEY");
+      this.workerExists = true;
+      this.scriptExists = true;
     }
     if (options.newsletterConfigured) {
       this.resources.d1.push({ uuid: "newsletter-d1-id", name: "example-newsletter" });
@@ -221,13 +244,25 @@ class FakeRuntime implements SetupRuntime {
     return { opened: true, copied: false };
   }
 
-  async apiFetch(url: string) {
+  async apiFetch(url: string, init?: RequestInit) {
     this.apiUrls.push(url);
+    if (url.includes("/workers/workers") && init?.method === "POST") {
+      this.writeRequests.push({ url, method: "POST" });
+      if (this.failWorkerCreateResponse > 0) {
+        this.failWorkerCreateResponse -= 1;
+        if (!this.workerCreateNeverLands) this.workerExists = true;
+        throw new Error("simulated Worker create response loss");
+      }
+      if (this.workerExists) return Response.json({ success: false, errors: [{ code: 10007 }] }, { status: 409 });
+      this.workerExists = true;
+      return Response.json({ success: true, result: { id: WORKER_ID, name: WORKER } });
+    }
     if (url.includes("/r2/buckets")) {
       if (this.r2Pagination && !url.includes("cursor=next")) return Response.json({ success: true, result: { buckets: this.resources.r2.slice(0, 1), truncated: true, cursor: "next" } });
       return Response.json({ success: true, result: { buckets: this.r2Pagination ? [...this.resources.r2.slice(1), { name: "other-media" }] : this.resources.r2, truncated: false } });
     }
     if (url.includes("/storage/kv/namespaces")) return Response.json({ success: true, result: this.resources.kv });
+    if (url.includes("/workers/workers")) return Response.json({ success: true, result: this.workerExists ? [{ id: WORKER_ID, name: WORKER }] : [] });
     if (url.includes("/workers/domains")) {
       const service = this.canonicalAttachment === "wrong" ? "another-worker" : WORKER;
       return Response.json({ success: true, result: this.canonicalAttachment === "missing" ? [] : [{ hostname: "example.test", service, status: "active" }] });
@@ -300,7 +335,10 @@ class FakeRuntime implements SetupRuntime {
       this.resources.kv.push({ id: `${title}-id`, title });
       return "";
     }
-    if (command.includes("versions") && command.includes("list")) return JSON.stringify(this.versions.map((entry) => ({ id: entry.id, metadata: { created_on: entry.createdOn }, annotations: { "workers/tag": entry.tag } })));
+    if (command.includes("versions") && command.includes("list")) {
+      if (!this.scriptExists) throw new Error(`Wrangler versions list failed. [code: 10007]`);
+      return JSON.stringify(this.versions.map((entry) => ({ id: entry.id, metadata: { created_on: entry.createdOn }, annotations: { "workers/tag": entry.tag } })));
+    }
     if (command.includes("versions") && command.includes("view")) {
       const id = command[command.indexOf("view") + 1];
       const version = this.versions.find((entry) => entry.id === id);
@@ -316,12 +354,38 @@ class FakeRuntime implements SetupRuntime {
         ...(version ? [...version.secrets].map((name) => ({ name, type: "secret_text" })) : []),
       ] } });
     }
-    if (command.includes("deployments") && command.includes("list")) return JSON.stringify(this.deployments.slice().reverse().map((entry) => ({ id: entry.id, metadata: { created_on: entry.createdOn }, versions: [{ version_id: entry.versionId, percentage: 100 }] })));
+    if (command.includes("deployments") && command.includes("list")) {
+      if (this.failDeploymentsList > 0) {
+        this.failDeploymentsList -= 1;
+        throw new Error("simulated deployments list authentication failure");
+      }
+      if (!this.scriptExists) {
+        this.events.push("deployments:missing");
+        throw new Error(`Wrangler deployments list failed. [code: 10007]`);
+      }
+      this.events.push("deployments:listed");
+      return JSON.stringify(this.deployments.slice().reverse().map((entry) => ({ id: entry.id, metadata: { created_on: entry.createdOn }, versions: [{ version_id: entry.versionId, percentage: 100 }] })));
+    }
     return "";
   }
 
   async runInteractive(command: string[]) {
     this.interactiveCommands.push(command);
+    if (isBootstrapDeploy(command)) {
+      if (this.failBootstrapDeploy > 0) {
+        this.failBootstrapDeploy -= 1;
+        throw new Error("simulated base Worker deployment failure");
+      }
+      if (this.bootstrapDeployNeverLands) return;
+      this.events.push("bootstrap:deployed");
+      this.workerDeployed = true;
+      this.scriptExists = true;
+      this.version += 1;
+      const id = `version-${this.version}`;
+      this.versions.push({ id, tag: "bootstrap", createdOn: `2026-01-01T00:00:${String(this.version).padStart(2, "0")}Z`, secrets: new Set() });
+      this.deployments.push({ id: `deployment-${this.deployments.length + 1}`, createdOn: `2026-01-01T00:01:${String(this.deployments.length + 1).padStart(2, "0")}Z`, versionId: id });
+      return;
+    }
     if (command.includes("triggers") && command.includes("deploy")) {
       if (this.failTriggers > 0) {
         this.failTriggers -= 1;
@@ -337,14 +401,19 @@ class FakeRuntime implements SetupRuntime {
       }
       const versionSpec = command.find((value) => value.includes("@100"));
       this.activeVersionId = versionSpec?.split("@")[0];
+      this.events.push("version:deployed");
       this.workerDeployed = true;
+      this.scriptExists = true;
       this.deployments.push({ id: `deployment-${this.deployments.length + 1}`, createdOn: `2026-01-01T00:01:${String(this.deployments.length + 1).padStart(2, "0")}Z`, versionId: this.activeVersionId ?? "" });
       return;
     }
     if (command.includes("versions") && command.includes("upload")) {
+      if (!this.workerDeployed) throw new Error("You cannot upload a new version of a Worker that does not yet exist. Please run the deploy command first.");
       const tag = command[command.indexOf("--tag") + 1];
       const previous = this.versions.at(-1);
       this.version += 1;
+      this.events.push("version:uploaded");
+      this.scriptExists = true;
       this.versions.push({ id: `version-${this.version}`, tag, createdOn: `2026-01-01T00:00:${String(this.version).padStart(2, "0")}Z`, secrets: new Set(previous?.secrets ?? []) });
       if (this.failVersionUpload > 0) {
         this.failVersionUpload -= 1;
@@ -371,6 +440,10 @@ function requiredFile(fs: MemoryFileSystem, path: string) {
 
 function fullFreshRuntime(options: FakeOptions = {}) {
   return new FakeRuntime(options).answer("y", WORKER, "", "", "https://example.test", "y", "n", "y", "SAVED", "SAVED", "y", "y");
+}
+
+function isBootstrapDeploy(command: string[]) {
+  return command.includes("deploy") && command.some((value) => value.endsWith("-bootstrap.jsonc"));
 }
 
 describe("full resumable provisioning sequences", () => {
@@ -423,6 +496,160 @@ describe("full resumable provisioning sequences", () => {
     const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
     expect(journal.preparedVersion?.versionId).toBeTruthy();
     expect(journal.milestones.triggersDeployed).toBe(true);
+  });
+
+  test("creates the missing Worker resource before any version listing on a fresh account", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.writeRequests).toEqual([{ url: `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/workers`, method: "POST" }]);
+    const listRequest = runtime.apiUrls.find((url) => url.includes(`/accounts/${ACCOUNT}/workers/workers`));
+    expect(listRequest).toContain("per_page=100");
+    const workerListIndex = runtime.apiUrls.findIndex((url) => url.includes(`/accounts/${ACCOUNT}/workers/workers`));
+    expect(runtime.apiUrls.slice(0, workerListIndex).some((url) => url.includes("/storage/kv/namespaces"))).toBe(true);
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("r2") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("kv") && command.includes("create")).length).toBe(1);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(journal.resources.worker).toEqual({ intendedName: WORKER, id: WORKER_ID, status: "verified", createAttempted: true, adopted: true });
+  });
+
+  test("resumes an interrupted Worker create only after discovery confirms it, without recreating resources or redeploying first", async () => {
+    const runtime = fullFreshRuntime({ failWorkerCreateResponse: 1 });
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(runtime.writeRequests.length).toBe(1);
+    expect(journal.resources.worker).toEqual({ intendedName: WORKER, id: WORKER_ID, status: "verified", createAttempted: true, adopted: true });
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("r2") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("kv") && command.includes("create")).length).toBe(1);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
+    expect(journal.milestones.triggersDeployed).toBe(true);
+  });
+
+  test("fails closed and deploys nothing when an interrupted Worker create never appears in discovery", async () => {
+    const runtime = fullFreshRuntime({ failWorkerCreateResponse: 1, workerCreateNeverLands: true });
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "create outcome is ambiguous");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(journal.resources.worker.createAttempted).toBe(true);
+    expect(journal.resources.worker.status).toBe("pending");
+    expect(runtime.writeRequests.length).toBe(1);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(0);
+    const d1Creates = runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length;
+    runtime.replaceAnswers("y", "y");
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "previous Worker create outcome");
+    expect(runtime.writeRequests.length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1Creates);
+  });
+
+  test("installs an inert base Worker version before the first prepared upload for a fresh Worker", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const missingListingIndex = runtime.events.indexOf("deployments:missing");
+    expect(missingListingIndex).toBeGreaterThanOrEqual(0);
+    expect(runtime.events.indexOf("bootstrap:deployed")).toBeGreaterThan(missingListingIndex);
+    expect(runtime.events.indexOf("version:uploaded")).toBeGreaterThan(runtime.events.indexOf("bootstrap:deployed"));
+    const bootstrapIndex = runtime.interactiveCommands.findIndex(isBootstrapDeploy);
+    const uploadIndex = runtime.interactiveCommands.findIndex((command) => command.includes("versions") && command.includes("upload"));
+    expect(bootstrapIndex).toBeGreaterThanOrEqual(0);
+    expect(uploadIndex).toBeGreaterThan(bootstrapIndex);
+    const bootstrap = runtime.interactiveCommands[bootstrapIndex];
+    const bootstrapConfig = requiredFile(runtime.fs, join(ROOT, ".wrangler/provisioning", `${WORKER}-bootstrap.jsonc`));
+    expect(bootstrap).toContain(join(ROOT, ".wrangler/provisioning", `${WORKER}-bootstrap.jsonc`));
+    const parsed = parseJsonc<Record<string, unknown>>(bootstrapConfig, "bootstrap config");
+    expect(parsed.name).toBe(WORKER);
+    expect(parsed.account_id).toBe(ACCOUNT);
+    expect(parsed.workers_dev).toBe(false);
+    expect(parsed.preview_urls).toBe(false);
+    expect(parsed.routes).toBeUndefined();
+    expect(parsed.d1_databases).toBeUndefined();
+    expect(parsed.r2_buckets).toBeUndefined();
+    expect(parsed.kv_namespaces).toBeUndefined();
+    expect(parsed.triggers).toBeUndefined();
+    expect(parsed.assets).toBeUndefined();
+    expect(typeof parsed.main).toBe("string");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(journal.milestones.workerBootstrapDeployed).toBe(true);
+    expect(journal.pending.deployment).toBe(false);
+    expect(runtime.originUrls).toEqual(["https://example.test"]);
+  });
+
+  test("uploads the prepared version against the built Astro config, not the root wrangler.jsonc", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const upload = runtime.interactiveCommands.find((command) => command.includes("versions") && command.includes("upload"));
+    expect(upload).toBeDefined();
+    expect(upload).toContain(join(ROOT, "dist/server/wrangler.json"));
+    expect(upload).not.toContain(join(ROOT, "wrangler.jsonc"));
+  });
+
+  test("resumes an interrupted base Worker deployment without redeploying or recreating resources", async () => {
+    const runtime = fullFreshRuntime({ failBootstrapDeploy: 1 });
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "base Worker deployment");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const pending = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(pending.milestones.workerBootstrapPending).toBe(true);
+    expect(pending.milestones.workerBootstrapDeployed).not.toBe(true);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
+    const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
+    runtime.replaceAnswers("y", "y", "y", "y", "SAVED", "SAVED", "y", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("r2") && command.includes("create")).length).toBe(1);
+    expect(runtime.commands.filter((command) => command.includes("kv") && command.includes("create")).length).toBe(1);
+    expect(runtime.writeRequests.length).toBe(1);
+    expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys + 1);
+    const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(complete.milestones.workerBootstrapPending).toBe(false);
+    expect(complete.milestones.workerBootstrapDeployed).toBe(true);
+  });
+
+  test("fails closed without bootstrapping when the deployment listing fails for another reason", async () => {
+    const runtime = fullFreshRuntime({ failDeploymentsList: 99 });
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "simulated deployments list authentication failure");
+    expect(runtime.events).not.toContain("bootstrap:deployed");
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(journal.milestones.workerBootstrapDeployed).not.toBe(true);
+  });
+
+  test("keeps the base deployment pending when a reported success is not visible remotely", async () => {
+    const runtime = fullFreshRuntime({ bootstrapDeployNeverLands: true });
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "no deployment was verified remotely");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const pending = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(pending.milestones.workerBootstrapPending).toBe(true);
+    expect(pending.milestones.workerBootstrapDeployed).not.toBe(true);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
+    const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
+    runtime.bootstrapDeployNeverLands = false;
+    runtime.replaceAnswers("y", "y", "y", "y", "SAVED", "SAVED", "y", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys + 1);
+    const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(complete.milestones.workerBootstrapPending).toBe(false);
+    expect(complete.milestones.workerBootstrapDeployed).toBe(true);
+  });
+
+  test("never bootstraps over a Worker that already has live traffic", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    delete journal.milestones.workerBootstrapDeployed;
+    runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
+    const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
+    runtime.replaceAnswers("y", "y", "y", "y", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys);
+    const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(complete.milestones.workerBootstrapDeployed).toBe(true);
   });
 
   test("does not complete handoff when the canonical attachment is missing or points to another Worker", async () => {
@@ -511,7 +738,7 @@ describe("full resumable provisioning sequences", () => {
       .replace('expectedHostname: "your-domain.com"', 'expectedHostname: "example.test"')
       .replace('turnstileSiteKey: ""', 'turnstileSiteKey: "site-key"');
     const runtime = new FakeRuntime({ config, site, coreConfigured: true, newsletterConfigured: true, resendConfigured: true, databaseEstablished: true, failDeployment: 1 })
-      .answer("y", "y", "y", "y", "y", "y", "n");
+      .answer("y", "y", "y", "y", "y", "y", "y", "n");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "Legacy newsletter");
     runtime.answer("y", "y", "y", "y");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "Deployment failed");
