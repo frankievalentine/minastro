@@ -6,7 +6,9 @@ import { siteConfig } from "../site.config";
 const defaultCopy = {
   eyebrow: "Newsletter",
   title: "Stay in the loop",
-  description: "Occasional notes on engineering, projects, and ideas. No spam.",
+  description:
+    siteConfig.newsletter.description?.trim() ||
+    "Occasional notes on engineering, projects, and ideas. No spam.",
   signupTitle: "Subscribe for new notes",
   signupDescription: "Get new writing and project updates in your inbox when there is something useful to share.",
   nameLabel: "Name",

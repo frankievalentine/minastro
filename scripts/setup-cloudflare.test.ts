@@ -77,7 +77,7 @@ interface FakeOptions {
   failBootstrapDeploy?: number;
   bootstrapDeployNeverLands?: boolean;
   failDeploymentsList?: number;
-  originMode?: "setup" | "ok" | "cross-origin" | "wrong-path" | "loop" | "bad-status";
+  originMode?: "setup" | "ok" | "cross-origin" | "wrong-path" | "loop" | "bad-status" | "protected-setup";
 }
 
 class FakeRuntime implements SetupRuntime {
@@ -122,7 +122,6 @@ class FakeRuntime implements SetupRuntime {
   failDeployment: number;
   migrationApplyResponseLoss: boolean;
   databaseEstablished: boolean;
-  private generatedKey = "generated-encryption-key";
   private answers: string[];
   private secretAnswers: string[];
 
@@ -225,19 +224,20 @@ class FakeRuntime implements SetupRuntime {
     return this;
   }
 
+  replaceSecretAnswers(...values: string[]) {
+    this.secretAnswers = values;
+    return this;
+  }
+
   async prompt() {
     return this.answers.shift() ?? "y";
   }
 
-  async promptSecret() {
-    return this.secretAnswers.shift() ?? "saved-secret";
+  async promptSecret(question: string) {
+    const value = this.secretAnswers.shift() ?? "saved-secret";
+    this.secretPrompts.push(question);
+    return value;
   }
-
-  async copySecret() {
-    return true;
-  }
-
-  async clearClipboard() {}
 
   async handoff() {
     this.handoffCount += 1;
@@ -274,6 +274,10 @@ class FakeRuntime implements SetupRuntime {
     this.originUrls.push(url);
     if (this.originMode === "ok") return new Response("ok", { status: 200 });
     if (this.originMode === "bad-status") return new Response("failure", { status: 503 });
+    if (this.originMode === "protected-setup" && new URL(url).pathname === "/_emdash/admin/setup") {
+      return new Response("First-admin bootstrap authorization required.", { status: 403, headers: { "cache-control": "no-store" } });
+    }
+    if (this.originMode === "protected-setup") return new Response("<html>site</html>", { status: 200 });
     const location = this.originMode === "cross-origin"
       ? "https://other.example/_emdash/admin/setup"
       : this.originMode === "wrong-path"
@@ -318,7 +322,6 @@ class FakeRuntime implements SetupRuntime {
       this.secrets.add(name);
       return "";
     }
-    if (command.includes("emdash") && command.includes("generate")) return this.generatedKey;
     if (command.includes("d1") && command.includes("create")) {
       if (this.failD1Create) throw new Error("simulated D1 create failure");
       const name = command[command.indexOf("create") + 1];
@@ -438,8 +441,19 @@ function requiredFile(fs: MemoryFileSystem, path: string) {
   return value;
 }
 
+const base64Url32 = (seed: number) => {
+  const bytes = new Uint8Array(32);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = (seed + index) % 256;
+  return Buffer.from(bytes).toString("base64url");
+};
+
+const OPERATOR_ENCRYPTION_KEY = `emdash_enc_v1_${base64Url32(3)}`;
+const OPERATOR_BOOTSTRAP_SECRET = base64Url32(131);
+
 function fullFreshRuntime(options: FakeOptions = {}) {
-  return new FakeRuntime(options).answer("y", WORKER, "", "", "https://example.test", "y", "n", "y", "SAVED", "SAVED", "y", "y");
+  return new FakeRuntime(options)
+    .answer("y", WORKER, "", "", "https://example.test", "y", "n", "y", "y", "y")
+    .secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
 }
 
 function isBootstrapDeploy(command: string[]) {
@@ -489,7 +503,8 @@ describe("full resumable provisioning sequences", () => {
     const runtime = fullFreshRuntime({ failVersionUpload: 1 });
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "Prepared version upload");
     const uploadsBeforeResume = runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length;
-    runtime.replaceAnswers("y", "y", "y", "SAVED", "SAVED", "y", "y");
+    runtime.replaceAnswers("y", "y", "y", "y", "y");
+    runtime.replaceSecretAnswers(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(uploadsBeforeResume);
     const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
@@ -597,7 +612,7 @@ describe("full resumable provisioning sequences", () => {
     expect(pending.milestones.workerBootstrapDeployed).not.toBe(true);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
-    runtime.replaceAnswers("y", "y", "y", "y", "SAVED", "SAVED", "y", "y");
+    runtime.replaceAnswers("y", "y", "y", "y", "y", "y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(1);
     expect(runtime.commands.filter((command) => command.includes("r2") && command.includes("create")).length).toBe(1);
@@ -629,7 +644,7 @@ describe("full resumable provisioning sequences", () => {
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
     runtime.bootstrapDeployNeverLands = false;
-    runtime.replaceAnswers("y", "y", "y", "y", "SAVED", "SAVED", "y", "y");
+    runtime.replaceAnswers("y", "y", "y", "y", "y", "y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys + 1);
     const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
@@ -646,10 +661,36 @@ describe("full resumable provisioning sequences", () => {
     runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
     runtime.replaceAnswers("y", "y", "y", "y", "y");
+    runtime.replaceSecretAnswers(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys);
     const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
     expect(complete.milestones.workerBootstrapDeployed).toBe(true);
+  });
+
+  test("recovers an old overlong pending secret tag from its verified predecessor", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    const baseTag = "minastro-setup-1759000000000-aabbccdd";
+    const ancestorTag = `${baseTag}-binding-11112222-binding-33334444`;
+    const pendingTag = `${ancestorTag}-binding-55556666-binding-77778888`;
+    expect(pendingTag.length).toBeGreaterThan(100);
+    runtime.versions.push({ id: "version-ancestor", tag: ancestorTag, createdOn: "2026-01-01T00:00:00Z", secrets: new Set(["EMDASH_ENCRYPTION_KEY", "EMDASH_BOOTSTRAP_SECRET"]) });
+    journal.preparedVersion = { versionId: "", tag: pendingTag, createdOn: "", revision: journal.preparedVersion?.revision ?? journal.deploymentRevision };
+    journal.secrets = { EMDASH_ENCRYPTION_KEY: "verified", EMDASH_BOOTSTRAP_SECRET: "verified" };
+    journal.pending.deployment = true;
+    runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
+    runtime.commands.length = 0;
+    runtime.interactiveCommands.length = 0;
+    runtime.replaceAnswers("y", "y", "y", "y", "y");
+    runtime.replaceSecretAnswers(OPERATOR_BOOTSTRAP_SECRET);
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.interactiveCommands.some((command) => command.includes("versions") && command.includes("upload"))).toBe(false);
+    const recovered = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(recovered.preparedVersion?.versionId).toBe("version-ancestor");
+    expect(recovered.preparedVersion?.tag).toBe(ancestorTag);
   });
 
   test("does not complete handoff when the canonical attachment is missing or points to another Worker", async () => {
@@ -672,6 +713,13 @@ describe("full resumable provisioning sequences", () => {
     }
   });
 
+  test("accepts the bootstrap-protected setup route as the pre-setup canonical shape", async () => {
+    const runtime = fullFreshRuntime({ originMode: "protected-setup" });
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.handoffCount).toBe(1);
+    expect(runtime.originUrls.some((url) => url.endsWith("/_emdash/admin/setup"))).toBe(true);
+  });
+
   test("reloads a partial journal without retrying an ambiguous D1 create", async () => {
     const runtime = new FakeRuntime({ failD1Create: true }).answer("y", WORKER, "", "", "https://example.test", "y", "n", "y");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "ambiguous");
@@ -681,7 +729,7 @@ describe("full resumable provisioning sequences", () => {
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "previous D1 database create outcome");
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1CreateAttempts);
     runtime.resources.d1.push({ uuid: "example-db-id", name: "example-db" });
-    runtime.answer("y", WORKER, "y", "y", "SAVED", "SAVED", "y", "y");
+    runtime.answer("y", WORKER, "y", "y", "y", "y").secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1CreateAttempts);
   });
@@ -701,19 +749,27 @@ describe("full resumable provisioning sequences", () => {
     const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "n", "y", "y", "y", "y");
     runtime.removeSecret("EMDASH_ENCRYPTION_KEY");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "EMDASH_ENCRYPTION_KEY is absent");
-    expect(runtime.commands.some((command) => command.includes("emdash") && command.includes("generate"))).toBe(false);
+    expect(runtime.commands.some((command) => command.includes("versions") && command.includes("secret") && command.includes("put"))).toBe(false);
+    expect(runtime.secretPrompts).toEqual([]);
   });
 
   test("handles partial newsletter and Resend prerequisites with migration response loss", async () => {
     const runtime = new FakeRuntime().answer(
-      "y", WORKER, "", "", "https://example.test", "n", "y", "newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "y", "SAVED", "y", "y",
-    ).secretAnswer("SAVED", "turnstile-secret", "admin-secret", "resend-secret");
+      "y", WORKER, "", "", "https://example.test", "n", "y", "newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "y", "y", "y",
+    ).secretAnswer(OPERATOR_ENCRYPTION_KEY, "turnstile-secret", "admin-secret", "resend-secret");
     runtime.migrationApplyResponseLoss = true;
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.migrations.has("0003_resend_quarantine.sql")).toBe(true);
     expect(runtime.secrets.has("TURNSTILE_SECRET_KEY")).toBe(true);
     expect(runtime.secrets.has("NEWSLETTER_ADMIN_TOKEN")).toBe(true);
     expect(runtime.secrets.has("RESEND_API_KEY")).toBe(true);
+    const writtenConfig = parseJsonc<{ ratelimits: Array<{ name: string; namespace_id: string }> }>(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc")), "reconciled Wrangler config");
+    expect(writtenConfig.ratelimits.find((binding) => binding.name === "NEWSLETTER_SUBSCRIBE_LIMITER")?.namespace_id).toBe("9");
+    const secretUploads = runtime.commands.filter((command) => command.includes("versions") && command.includes("secret") && command.includes("put"));
+    expect(secretUploads).toHaveLength(4);
+    const tags = secretUploads.map((command) => command[command.indexOf("--tag") + 1] ?? "");
+    expect(tags.every((tag) => tag.length > 0 && tag.length <= 100)).toBe(true);
+    expect(new Set(tags).size).toBe(4);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
   });
 
@@ -745,6 +801,8 @@ describe("full resumable provisioning sequences", () => {
     runtime.answer("y", "y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(2);
+    const writtenConfig = parseJsonc<{ ratelimits: Array<{ name: string; namespace_id: string }> }>(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc")), "reconciled Wrangler config");
+    expect(writtenConfig.ratelimits.find((binding) => binding.name === "NEWSLETTER_SUBSCRIBE_LIMITER")?.namespace_id).toBe("9");
   });
 
   test("keeps legacy cutover pending when trigger deployment fails after version deployment", async () => {

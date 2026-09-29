@@ -58,8 +58,6 @@ export interface SetupRuntime {
   runInteractive: (command: string[], options?: CommandOptions) => Promise<void>;
   prompt: Prompt;
   promptSecret: Prompt;
-  copySecret: (secret: string) => Promise<boolean>;
-  clearClipboard: () => Promise<void>;
   handoff: (origin: string, secret: string) => Promise<HandoffResult>;
   close?: () => void;
 }
@@ -104,11 +102,63 @@ function normalizeName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
 }
 
-function generateBootstrapSecret() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
+const ENCRYPTION_KEY_PREFIX = "emdash_enc_v1_";
+const ENCRYPTION_KEY_BODY_LENGTH = 43;
+const BOOTSTRAP_SECRET_BODY_LENGTH = 43;
+const BASE64URL_BODY_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+function canonicalBase64url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+/**
+ * Decode an unpadded base64url body, returning null when it is not exactly
+ * `bytes` long or is not the canonical encoding of its own decoded bytes.
+ * EmDash's `parseEncryptionKeys` requires both, and a 43-char body carries two
+ * spare bits, so 4 spellings decode to the same key; rejecting non-canonical
+ * spellings keeps a pasted key equivalent to `emdash secrets generate` output.
+ */
+function decodeCanonicalBase64url(value: string, bytes: number): Uint8Array | null {
+  if (!BASE64URL_BODY_PATTERN.test(value)) return null;
+  try {
+    const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
+    const decoded = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    if (decoded.length !== bytes || canonicalBase64url(decoded) !== value) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+export function encryptionKeyFormatError(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return "EMDASH_ENCRYPTION_KEY is empty.";
+  if (!normalized.startsWith(ENCRYPTION_KEY_PREFIX)) {
+    return `EMDASH_ENCRYPTION_KEY must start with "${ENCRYPTION_KEY_PREFIX}".`;
+  }
+  const body = normalized.slice(ENCRYPTION_KEY_PREFIX.length);
+  if (body.length !== ENCRYPTION_KEY_BODY_LENGTH) {
+    return `EMDASH_ENCRYPTION_KEY must be "emdash_enc_v1_" followed by ${ENCRYPTION_KEY_BODY_LENGTH} base64url characters; got ${body.length}.`;
+  }
+  if (!decodeCanonicalBase64url(body, 32)) {
+    return "EMDASH_ENCRYPTION_KEY body must be canonical unpadded base64url of 32 random bytes.";
+  }
+  return null;
+}
+
+export function bootstrapSecretFormatError(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return "EMDASH_BOOTSTRAP_SECRET is empty.";
+  if (/\s/.test(normalized)) return "EMDASH_BOOTSTRAP_SECRET must be a single line with no whitespace.";
+  if (normalized.length !== BOOTSTRAP_SECRET_BODY_LENGTH) {
+    return `EMDASH_BOOTSTRAP_SECRET must be ${BOOTSTRAP_SECRET_BODY_LENGTH} base64url characters (32 random bytes); got ${normalized.length}.`;
+  }
+  if (!decodeCanonicalBase64url(normalized, 32)) {
+    return "EMDASH_BOOTSTRAP_SECRET must be canonical unpadded base64url of 32 random bytes.";
+  }
+  return null;
 }
 
 function externalCommand(kind: "open" | "clipboard", value: string): string[] | null {
@@ -251,10 +301,6 @@ function defaultRuntime(readline: ReturnType<typeof createInterface>): SetupRunt
       get: () => activeReadline,
       replace: (next) => { activeReadline = next as ReturnType<typeof createInterface>; },
     }, recreateReadline),
-    copySecret: (secret) => runExternal("clipboard", secret),
-    clearClipboard: async () => {
-      await runExternal("clipboard", "");
-    },
     async handoff(origin, secret) {
       const url = new URL("/_emdash/admin/setup", origin);
       url.searchParams.set("bootstrap", secret);
@@ -661,19 +707,29 @@ async function resolveJournalResource(
   return resolved;
 }
 
-async function promptSavedSecret(runtime: SetupRuntime, name: string): Promise<string> {
+type SecretValidator = (value: string) => string | null;
+
+async function promptSavedSecret(runtime: SetupRuntime, name: string, validate?: SecretValidator): Promise<string> {
   const value = (await runtime.promptSecret(`Enter the saved ${name} value; input is hidden and the value is not stored by setup: `)).trim();
   if (!value) throw new Error(`${name} is required to resume the pending secret operation. Recover it from the password manager before continuing.`);
+  const problem = validate?.(value);
+  if (problem) throw new Error(problem);
   return value;
 }
 
-async function custodySecret(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, name: string, value: string): Promise<string> {
+async function operatorSecret(
+  runtime: SetupRuntime,
+  journal: ProvisioningJournal,
+  journalPath: string,
+  name: string,
+  question: string,
+  validate: SecretValidator,
+): Promise<string> {
   journal.secrets[name] = "custody_pending";
   await save(runtime, journalPath, journal);
-  if (!await runtime.copySecret(value)) throw new Error(`${name} was generated but could not be copied for password-manager custody; no upload was attempted.`);
-  const saved = await runtime.prompt(`Save ${name} in the password manager, then type SAVED to continue: `);
-  await runtime.clearClipboard();
-  if (saved.trim().toUpperCase() !== "SAVED") throw new Error(`${name} was not confirmed saved; no upload was attempted.`);
+  const value = (await runtime.promptSecret(question)).trim();
+  const problem = validate(value);
+  if (problem) throw new Error(problem);
   return value;
 }
 
@@ -691,16 +747,31 @@ async function uploadSecret(
 ) {
   if (!journal.preparedVersion?.versionId) throw new Error(`${name} cannot be added before a prepared Worker version exists.`);
   await markDeploymentPending(runtime, journalPath, journal);
+  const base = journal.preparedVersion;
+  const pendingTag = journal.secrets[name] === "upload_pending" ? base.tag : undefined;
+  let tag = pendingTag ?? secretVersionTag();
+  if (pendingTag) {
+    const existing = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", workerName, "--json"], { quiet: true }))
+      .filter((entry) => findTag(entry) === pendingTag);
+    if (existing.length > 1) throw new Error(`The pending ${name} tag resolves to multiple versions; operator review is required before retrying.`);
+    const id = existing.length === 1 ? versionId(existing[0]) : undefined;
+    if (existing.length === 1 && id && (await inspectVersion(runtime, root, account, plan, id, expected)).secretNames.has(name)) {
+      journal.preparedVersion = { versionId: id, tag, createdOn: metadataCreatedOn(existing[0]), revision: base.revision };
+      journal.secrets[name] = "verified";
+      await save(runtime, journalPath, journal);
+      return;
+    }
+    tag = secretVersionTag();
+  }
+  assertBoundedTag(tag, `${name} upload`);
   journal.secrets[name] = "upload_pending";
-  const revision = journal.preparedVersion.revision;
-  const bindingTagBytes = crypto.getRandomValues(new Uint8Array(4));
-  const tag = `${journal.preparedVersion.tag}-binding-${Array.from(bindingTagBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-  journal.preparedVersion = { versionId: "", tag, createdOn: "", revision };
+  journal.preparedVersion = { versionId: base.versionId, tag, createdOn: base.createdOn, revision: base.revision };
   await save(runtime, journalPath, journal);
   try {
     await runWrangler(runtime, root, account, ["versions", "secret", "put", name, "--name", workerName, "--tag", tag, "--message", tag], { input: `${value}\n`, quiet: true });
-  } catch {
-    throw new Error(`${name} upload did not complete; rerun setup with the saved value. No replacement was generated.`);
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? ` ${error.message}` : "";
+    throw new Error(`${name} upload did not complete; rerun setup with the saved value. No replacement was generated.${detail}`);
   }
   const versions = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", workerName, "--json"], { quiet: true }));
   const tagged = versions.filter((entry) => findTag(entry) === tag);
@@ -721,7 +792,7 @@ export async function ensureSecret(
   account: string,
   workerName: string,
   name: string,
-  options: { allowGenerate: boolean; generate: () => Promise<string> },
+  options: { allowProvide: boolean; provide: () => Promise<string>; validate?: SecretValidator },
   names: Set<string>,
   plan: Plan,
   expected: BindingExpectation[],
@@ -732,11 +803,11 @@ export async function ensureSecret(
     return;
   }
   if (journal.secrets[name] && journal.secrets[name] !== "unknown") {
-    await uploadSecret(runtime, journal, journalPath, root, account, workerName, plan, expected, name, await promptSavedSecret(runtime, name));
+    await uploadSecret(runtime, journal, journalPath, root, account, workerName, plan, expected, name, await promptSavedSecret(runtime, name, options.validate));
     return;
   }
-  if (!options.allowGenerate) throw new Error(`${name} is absent or unrecoverable on an established site. Recover it from the password manager; setup will not generate a replacement.`);
-  await uploadSecret(runtime, journal, journalPath, root, account, workerName, plan, expected, name, await custodySecret(runtime, journal, journalPath, name, await options.generate()));
+  if (!options.allowProvide) throw new Error(`${name} is absent or unrecoverable on an established site. Recover the original value from the password manager; setup will not substitute a new one.`);
+  await uploadSecret(runtime, journal, journalPath, root, account, workerName, plan, expected, name, await options.provide());
 }
 
 export async function ensureInteractiveSecret(
@@ -1051,6 +1122,50 @@ function versionTag(): string {
   return `minastro-setup-${Date.now()}-${Array.from(versionTagBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
+const WORKER_TAG_MAX_LENGTH = 100;
+
+function secretVersionTag(): string {
+  const versionTagBytes = crypto.getRandomValues(new Uint8Array(4));
+  return `minastro-upload-${Date.now()}-${Array.from(versionTagBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function assertBoundedTag(tag: string, label: string) {
+  if (tag.length > WORKER_TAG_MAX_LENGTH) throw new Error(`${label} tag is ${tag.length} characters and exceeds Cloudflare's ${WORKER_TAG_MAX_LENGTH}-character limit; refusing to upload.`);
+}
+
+async function recoverCumulativeSecretTag(
+  runtime: SetupRuntime,
+  journal: ProvisioningJournal,
+  journalPath: string,
+  root: string,
+  account: string,
+  plan: Plan,
+  expected: BindingExpectation[],
+  versions: Record<string, unknown>[],
+): Promise<boolean> {
+  const prepared = journal.preparedVersion;
+  if (!prepared) return false;
+  const verified = new Set(Object.entries(journal.secrets).filter(([, state]) => state === "verified").map(([name]) => name));
+  if (verified.size === 0) return false;
+  let tag = prepared.tag;
+  while (/-binding-[0-9a-f]{8}$/.test(tag)) {
+    tag = tag.replace(/-binding-[0-9a-f]{8}$/, "");
+    const matches = versions.filter((entry) => findTag(entry) === tag);
+    if (matches.length > 1) throw new Error("A predecessor version tag resolves to multiple versions; operator review is required before retrying.");
+    if (matches.length === 0) continue;
+    const id = versionId(matches[0]);
+    if (!id) continue;
+    const inspected = await inspectVersion(runtime, root, account, plan, id, expected);
+    if (inspected.secretNames.size !== verified.size || [...verified].some((name) => !inspected.secretNames.has(name))) continue;
+    prepared.versionId = id;
+    prepared.tag = tag;
+    prepared.createdOn = metadataCreatedOn(matches[0]);
+    await save(runtime, journalPath, journal);
+    return true;
+  }
+  return false;
+}
+
 async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, root: string, account: string, plan: Plan, expected: BindingExpectation[]) {
   if (!journal.preparedVersion) {
     await markDeploymentPending(runtime, journalPath, journal);
@@ -1062,8 +1177,8 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
     await inspectVersion(runtime, root, account, plan, prepared.versionId, expected);
     return prepared;
   }
-  const existing = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", plan.workerName, "--json"], { quiet: true }))
-    .filter((entry) => findTag(entry) === prepared.tag);
+  const versions = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", plan.workerName, "--json"], { quiet: true }));
+  const existing = versions.filter((entry) => findTag(entry) === prepared.tag);
   if (existing.length > 1) throw new Error("The persisted prepared version tag resolves to multiple versions; operator review is required before retrying.");
   if (existing.length === 1) {
     const id = versionId(existing[0]);
@@ -1074,6 +1189,11 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
     await save(runtime, journalPath, journal);
     return prepared;
   }
+  if (prepared.tag.length > WORKER_TAG_MAX_LENGTH) {
+    if (await recoverCumulativeSecretTag(runtime, journal, journalPath, root, account, plan, expected, versions)) return prepared;
+    throw new Error("The pending Worker version tag exceeds Cloudflare's 100-character limit and no verified predecessor was found; operator review is required before retrying.");
+  }
+  assertBoundedTag(prepared.tag, "Prepared version");
   try {
     await runtime.runInteractive(["bun", "run", "build"], { env: { CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } });
     const builtConfig = join(root, "dist/server/wrangler.json");
@@ -1082,8 +1202,8 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
   } catch {
     throw new Error("Prepared version upload failed or is ambiguous; rerun setup to inspect the persisted version tag before retrying.");
   }
-  const versions = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", plan.workerName, "--json"], { quiet: true }));
-  const tagged = versions.filter((entry) => findTag(entry) === prepared.tag);
+  const uploadedVersions = versionEntries(await runWrangler(runtime, root, account, ["versions", "list", "--name", plan.workerName, "--json"], { quiet: true }));
+  const tagged = uploadedVersions.filter((entry) => findTag(entry) === prepared.tag);
   if (tagged.length !== 1) throw new Error("The prepared version upload did not resolve to exactly one newly created version by its persisted tag; no duplicate upload will be attempted.");
   const id = versionId(tagged[0]);
   if (!id) throw new Error("The prepared version has no version identity; no duplicate upload will be attempted.");
@@ -1232,6 +1352,40 @@ async function ensureBaseWorkerDeployment(runtime: SetupRuntime, journal: Provis
   await save(runtime, journalPath, journal);
 }
 
+const SETUP_ROUTE_PATH = "/_emdash/admin/setup";
+const BOOTSTRAP_REQUIRED_MESSAGE = "First-admin bootstrap authorization required.";
+
+function isSameOriginSetupRedirect(response: Response, canonicalOrigin: string) {
+  if (response.status < 300 || response.status >= 400) return false;
+  const location = response.headers.get("location");
+  if (!location) return false;
+  let target: URL;
+  try {
+    target = new URL(location, canonicalOrigin);
+  } catch {
+    return false;
+  }
+  const origin = new URL(canonicalOrigin);
+  return target.origin === origin.origin && target.pathname === SETUP_ROUTE_PATH && !target.hash;
+}
+
+async function setupRouteIsBootstrapProtected(runtime: SetupRuntime, canonicalOrigin: string) {
+  const response = await runtime.originFetch(new URL(SETUP_ROUTE_PATH, canonicalOrigin).toString(), { redirect: "manual" });
+  if (response.status !== 403) return false;
+  if (!/\bno-store\b/i.test(response.headers.get("cache-control") ?? "")) return false;
+  return (await response.text()) === BOOTSTRAP_REQUIRED_MESSAGE;
+}
+
+// A seeded site without a registered administrator serves the root document and
+// gates the setup route behind the bootstrap secret, so both pre-setup shapes pass.
+async function canonicalOriginServesApprovedSite(runtime: SetupRuntime, canonicalOrigin: string, expectSetupRedirect: boolean) {
+  const response = await runtime.originFetch(canonicalOrigin, { redirect: "manual" });
+  if (!expectSetupRedirect) return response.ok;
+  if (isSameOriginSetupRedirect(response, canonicalOrigin)) return true;
+  if (!response.ok) return false;
+  return setupRouteIsBootstrapProtected(runtime, canonicalOrigin);
+}
+
 async function verifyCanonicalOrigin(runtime: SetupRuntime, account: string, plan: Plan, path: string, expectSetupRedirect: boolean, triggersDeployed: boolean) {
   const source = await runtime.fs.read(path);
   if (source === null || canonicalOriginFromSource(source) !== plan.canonicalOrigin) throw new Error("The canonical origin was not verified before completion.");
@@ -1262,17 +1416,7 @@ async function verifyCanonicalOrigin(runtime: SetupRuntime, account: string, pla
   });
   if (!attachment) throw new Error("The canonical hostname is not actively attached to the approved Worker; completion remains pending.");
   try {
-    const response = await runtime.originFetch(plan.canonicalOrigin, { redirect: "manual" });
-    if (expectSetupRedirect) {
-      if (response.status < 300 || response.status >= 400) throw new Error();
-      const location = response.headers.get("location");
-      if (!location) throw new Error();
-      const target = new URL(location, plan.canonicalOrigin);
-      const origin = new URL(plan.canonicalOrigin);
-      if (target.origin !== origin.origin || target.pathname !== "/_emdash/admin/setup" || target.hash) throw new Error();
-    } else if (!response.ok) {
-      throw new Error();
-    }
+    if (!(await canonicalOriginServesApprovedSite(runtime, plan.canonicalOrigin, expectSetupRedirect))) throw new Error();
   } catch {
     throw new Error("The canonical HTTPS origin did not return the expected same-origin response; completion remains pending.");
   }
@@ -1281,7 +1425,7 @@ async function verifyCanonicalOrigin(runtime: SetupRuntime, account: string, pla
 async function completeBootstrapHandoff(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, plan: Plan, bootstrapSecret: string | undefined) {
   if (!plan.bootstrapRequested || !journal.pending.bootstrapHandoff) return;
   let secret = bootstrapSecret;
-  if (!secret) secret = await promptSavedSecret(runtime, "EMDASH_BOOTSTRAP_SECRET");
+  if (!secret) secret = await promptSavedSecret(runtime, "EMDASH_BOOTSTRAP_SECRET", bootstrapSecretFormatError);
   const result = await runtime.handoff(plan.canonicalOrigin, secret);
   if (!result.opened && !result.copied) throw new Error("Bootstrap handoff could not be opened or copied. No secret was printed or rotated; use the saved secret for an operator-controlled direct handoff and rerun setup.");
   journal.pending.bootstrapHandoff = false;
@@ -1415,17 +1559,20 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     }
     journal.plan = plan as unknown as Record<string, unknown>;
     await save(runtime, path, journal);
-    const needsDeployment = journal.pending.deployment || plan.newCore || (plan.newsletter.enabled && !journal.milestones.newsletterMigration);
+    const needsDeployment = journal.pending.deployment
+      || (plan.newCore && !journal.milestones.deployed)
+      || (plan.newsletter.enabled && !journal.milestones.newsletterMigration);
     let bootstrapSecret: string | undefined;
+    await ensureBaseWorkerDeployment(runtime, journal, path, root, approvedAccount, plan);
     if (needsDeployment) {
-      await ensureBaseWorkerDeployment(runtime, journal, path, root, approvedAccount, plan);
       await prepareVersion(runtime, journal, path, root, approvedAccount, plan, expectedBindings);
       let names = await secretNames(runtime, root, approvedAccount, plan, journal.preparedVersion?.versionId ?? "", expectedBindings);
       const legacy = plan.newsletter.enabled && plan.resend.enabled && !plan.newsletter.newFeature;
       if (legacy) await confirmLegacyCutover(runtime, journal, path, plan, "secret and migration operations");
       await ensureSecret(runtime, journal, path, root, approvedAccount, plan.workerName, "EMDASH_ENCRYPTION_KEY", {
-        allowGenerate: plan.newCore && !currentState.schemaInitialized,
-        generate: () => runtime.run(["bunx", "emdash", "secrets", "generate"], { quiet: true }),
+        allowProvide: plan.newCore && !currentState.schemaInitialized,
+        provide: () => operatorSecret(runtime, journal, path, "EMDASH_ENCRYPTION_KEY", "Enter the EMDASH_ENCRYPTION_KEY generated with OpenSSL; input is hidden and the value is not stored by setup: ", encryptionKeyFormatError),
+        validate: encryptionKeyFormatError,
       }, names, plan, expectedBindings);
       names = await secretNames(runtime, root, approvedAccount, plan, journal.preparedVersion?.versionId ?? "", expectedBindings);
       if (plan.bootstrapRequested && !currentState.established) {
@@ -1434,8 +1581,8 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
         if (names.has("EMDASH_BOOTSTRAP_SECRET")) journal.secrets.EMDASH_BOOTSTRAP_SECRET = "verified";
         else {
           const value = journal.secrets.EMDASH_BOOTSTRAP_SECRET && journal.secrets.EMDASH_BOOTSTRAP_SECRET !== "unknown"
-            ? await promptSavedSecret(runtime, "EMDASH_BOOTSTRAP_SECRET")
-            : await custodySecret(runtime, journal, path, "EMDASH_BOOTSTRAP_SECRET", generateBootstrapSecret());
+            ? await promptSavedSecret(runtime, "EMDASH_BOOTSTRAP_SECRET", bootstrapSecretFormatError)
+            : await operatorSecret(runtime, journal, path, "EMDASH_BOOTSTRAP_SECRET", "Enter the EMDASH_BOOTSTRAP_SECRET generated with OpenSSL; input is hidden and the value is not stored by setup: ", bootstrapSecretFormatError);
           bootstrapSecret = value;
           await uploadSecret(runtime, journal, path, root, approvedAccount, plan.workerName, plan, expectedBindings, "EMDASH_BOOTSTRAP_SECRET", value);
         }

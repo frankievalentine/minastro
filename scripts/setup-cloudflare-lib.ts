@@ -393,11 +393,11 @@ export function reconcileWranglerConfig(source: string, input: ConfigReconcileIn
     config.send_email = sendEmail;
     const ratelimits = Array.isArray(config.ratelimits) ? config.ratelimits : [];
     const limiter = ratelimits.find((entry) => asObject(entry, "Rate limiter").name === "NEWSLETTER_SUBSCRIBE_LIMITER");
-    const desiredNamespace = Number(input.newsletter.rateLimitNamespaceId);
-    if (!Number.isSafeInteger(desiredNamespace) || desiredNamespace <= 0) throw new Error("The approved rate-limit namespace ID is invalid.");
+    const desiredNamespace = input.newsletter.rateLimitNamespaceId.trim();
+    if (!/^[1-9]\d*$/.test(desiredNamespace)) throw new Error("The approved rate-limit namespace ID is invalid.");
     if (limiter) {
       const object = asObject(limiter, "Rate limiter");
-      if (object.namespace_id !== undefined && object.namespace_id !== desiredNamespace) throw new Error("NEWSLETTER_SUBSCRIBE_LIMITER conflicts with the approved namespace.");
+      if (object.namespace_id !== undefined && String(object.namespace_id) !== desiredNamespace) throw new Error("NEWSLETTER_SUBSCRIBE_LIMITER conflicts with the approved namespace.");
       object.namespace_id = desiredNamespace;
       object.simple = object.simple ?? { limit: 5, period: 60 };
     } else ratelimits.push({ name: "NEWSLETTER_SUBSCRIBE_LIMITER", namespace_id: desiredNamespace, simple: { limit: 5, period: 60 } });
