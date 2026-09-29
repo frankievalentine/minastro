@@ -1,12 +1,23 @@
-# Local secret values only. This file does not create Worker bindings; configure
-# D1, Email Sending, and Rate Limiting in wrangler.jsonc before testing the
-# newsletter with Wrangler.
+# Optional local overrides for `bun run cf:dev`. Nothing here is required for
+# local development: with no `.dev.vars` file present, the launcher runs fully
+# locally with simulated D1/R2/KV bindings and supplies its own temporary
+# first-admin bootstrap secret. This file does not create Worker bindings;
+# configure D1, Email Sending, and Rate Limiting in wrangler.jsonc before
+# testing the newsletter with Wrangler.
+#
+# Keep this file only for the values below. While it exists, `bun run cf:dev`
+# stops minting a temporary secret, so a missing or empty
+# EMDASH_BOOTSTRAP_SECRET blocks first-admin setup until you fill it in or
+# delete this file.
 
 # Optional local EmDash secret. Generate one with `bunx emdash secrets generate`.
 EMDASH_ENCRYPTION_KEY=
 
-# Required before `bun run cf:dev`: generate a Base64URL value and set it here.
-EMDASH_BOOTSTRAP_SECRET=
+# Required while this file exists: at least 32 bytes of Base64URL. Fill in the
+# line below, or delete this file to let `bun run cf:dev` mint a temporary local
+# secret. Generate a value with:
+# printf '%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+# EMDASH_BOOTSTRAP_SECRET=
 
 # Newsletter (Turnstile) — set via `bunx wrangler secret put TURNSTILE_SECRET_KEY` in production
 # Get your secret key from https://dash.cloudflare.com/?to=/:account/turnstile
