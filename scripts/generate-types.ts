@@ -17,6 +17,10 @@
 import { readdir, writeFile } from "node:fs/promises";
 import { hashString, validateSeed } from "emdash";
 import type { SeedCollection, SeedField, SeedFile } from "emdash/seed";
+import { createTerminalUI } from "./terminal-ui";
+
+const ui = createTerminalUI();
+ui.section("EmDash type generation");
 
 const distDir = new URL("../node_modules/emdash/dist/", import.meta.url);
 
@@ -88,7 +92,7 @@ const seed = (await seedFile.json()) as SeedFile;
 
 const validation = validateSeed(seed);
 if (!validation.valid) {
-  console.error("Refusing to generate types from an invalid seed:");
+  ui.failure("Refusing to generate types from an invalid seed");
   for (const error of validation.errors) {
     console.error(typeof error === "string" ? error : JSON.stringify(error));
   }
@@ -96,11 +100,11 @@ if (!validation.valid) {
 }
 
 if (!seed.collections?.length) {
-  console.error("Seed declares no collections; nothing to generate.");
+  ui.failure("Seed declares no collections; nothing to generate");
   process.exit(1);
 }
 
-const generator = await loadEmDashTypeGenerator();
+const generator = await ui.run("Loading EmDash type generator", loadEmDashTypeGenerator);
 
 // Same shape the /schema endpoint feeds its generators: collections with fields.
 const collectionsWithFields = seed.collections.map(toSchemaExportCollection);
@@ -120,13 +124,13 @@ const types = `${header}${collectionsWithFields
   .map((collection) => generator.generateTypeScript(collection, interfaceNames.get(collection.slug)))
   .join("\n\n")}`;
 
-await writeFile(new URL("../.emdash/types.ts", import.meta.url), types, "utf-8");
-await writeFile(
-  new URL("../.emdash/schema.json", import.meta.url),
-  JSON.stringify(schema, null, 2),
-  "utf-8",
-);
+await ui.run("Writing type artifacts", async () => {
+  await writeFile(new URL("../.emdash/types.ts", import.meta.url), types, "utf-8");
+  await writeFile(
+    new URL("../.emdash/schema.json", import.meta.url),
+    JSON.stringify(schema, null, 2),
+    "utf-8",
+  );
+});
 
-console.log(
-  `Generated .emdash/types.ts and .emdash/schema.json from .emdash/seed.json (${collectionsWithFields.length} collections, schema version ${schema.version}).`,
-);
+ui.success(`Generated ${collectionsWithFields.length} collections (schema ${schema.version})`);

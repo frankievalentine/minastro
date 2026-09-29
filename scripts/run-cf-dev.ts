@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { createTerminalUI } from "./terminal-ui";
+
+const ui = createTerminalUI();
 
 function configuredPort(): string {
   const value = process.env.MINASTRO_CF_DEV_PORT ?? "8787";
@@ -9,7 +12,8 @@ function configuredPort(): string {
   return String(port);
 }
 
-const args = ["x", "wrangler", "dev", "--local", "--port", configuredPort()];
+const port = configuredPort();
+const args = ["x", "wrangler", "dev", "--local", "--port", port];
 const persistTo = process.env.MINASTRO_CF_DEV_PERSIST_TO;
 const bootstrapSecret = process.env.MINASTRO_CF_DEV_BOOTSTRAP_SECRET;
 const config = process.env.MINASTRO_CF_DEV_CONFIG;
@@ -21,6 +25,8 @@ if (bootstrapSecret) args.push("--var", `EMDASH_BOOTSTRAP_SECRET:${bootstrapSecr
 if (config) args.push("--config", config);
 if (wranglerEnvironment) args.push("--env", wranglerEnvironment);
 
+ui.section("Local Cloudflare Worker");
+ui.note(`Starting on port ${port} (full Wrangler output follows)`);
 const child = spawn(process.execPath, args, {
   cwd: wranglerCwd,
   env: process.env,
@@ -37,7 +43,7 @@ process.on("SIGINT", () => forwardSignal("SIGINT"));
 process.on("SIGTERM", () => forwardSignal("SIGTERM"));
 
 child.once("error", (error) => {
-  console.error(`Could not start Wrangler local development server: ${error.message}`);
+  ui.failure(`Could not start Wrangler local development server: ${error.message}`);
   process.exitCode = 1;
 });
 

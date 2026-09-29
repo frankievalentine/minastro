@@ -11,6 +11,7 @@ bun run check            # Type-check and lint
 bun run seed:validate    # Validate the EmDash bootstrap seed
 bun run types:generate   # Regenerate .emdash/types.ts and .emdash/schema.json from .emdash/seed.json
 bun run cloudflare:setup # Provision D1/R2 and deploy the configured Worker once
+bun run preview:setup    # Preview setup terminal output and run a local build; no Cloudflare access
 bun run cf:deploy        # Deploy an already configured Worker
 ```
 

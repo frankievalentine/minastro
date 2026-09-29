@@ -5,6 +5,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { createTerminalUI } from "./terminal-ui";
+
+const ui = createTerminalUI();
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -360,6 +363,7 @@ async function waitForWorker(
 }
 
 async function main(): Promise<void> {
+  ui.section("Local Worker smoke test");
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
   const stateRoot = await mkdtemp(join(tmpdir(), "minastro-worker-smoke-"));
@@ -382,6 +386,7 @@ async function main(): Promise<void> {
   };
 
   try {
+    ui.note("Starting isolated Worker (full Wrangler output follows)");
     child = spawn(process.execPath, ["run", "scripts/run-cf-dev.ts"], {
       cwd: REPO_ROOT,
       detached: process.platform !== "win32",
@@ -396,17 +401,18 @@ async function main(): Promise<void> {
 
     if (interruptedSignal) throw new Error(`Smoke run interrupted by ${interruptedSignal}.`);
 
+    ui.section("Runtime checks");
     const root = await request(origin, "/");
     assertEmptyD1Endpoint("/", root);
-    console.log(`PASS / runtime boundary -> ${root.status}`);
+    ui.success(`/ runtime boundary → ${root.status}`);
 
     const setup = await request(origin, "/_emdash/admin/setup");
     assertBootstrapDenied(setup);
-    console.log(`PASS /_emdash/admin/setup without bootstrap -> ${setup.status}`);
+    ui.success(`/_emdash/admin/setup without bootstrap → ${setup.status}`);
 
     const bootstrap = await request(origin, `/_emdash/admin/setup?bootstrap=${encodeURIComponent(bootstrapSecret)}`);
     assertBootstrapRedirect(bootstrap);
-    console.log(`PASS valid bootstrap token -> ${bootstrap.status} ${bootstrap.location}`);
+    ui.success(`Valid bootstrap token → ${bootstrap.status} ${bootstrap.location}`);
 
     requireCondition(bootstrap.setCookie !== null, "The authorized setup redirect did not issue a bootstrap cookie.");
     const setupWithCookie = await request(origin, "/_emdash/admin/setup", {
@@ -414,16 +420,16 @@ async function main(): Promise<void> {
     });
     requireCondition(setupWithCookie.status === 200, `Expected the issued bootstrap cookie to authorize the setup UI, got ${setupWithCookie.status}.`);
     requireCondition(!setupWithCookie.body.includes(bootstrapSecret), "The setup UI response exposed the bootstrap secret.");
-    console.log(`PASS setup UI with issued cookie -> ${setupWithCookie.status}`);
+    ui.success(`Setup UI with issued cookie → ${setupWithCookie.status}`);
 
     const invalidBootstrap = await request(origin, "/_emdash/admin/setup?bootstrap=invalid-smoke-token");
     assertBootstrapDenied(invalidBootstrap);
-    console.log(`PASS invalid bootstrap token -> ${invalidBootstrap.status}`);
+    ui.success(`Invalid bootstrap token → ${invalidBootstrap.status}`);
 
     for (const pathname of ["/robots.txt", "/sitemap.xml", "/_emdash/api/search?q=smoke"]) {
       const response = await request(origin, pathname);
       assertEmptyD1Endpoint(pathname.split("?", 1)[0], response);
-      console.log(`PASS ${pathname} runtime boundary -> ${response.status}`);
+      ui.success(`${pathname} runtime boundary → ${response.status}`);
     }
 
     await terminateOwnedProcess(child);
@@ -436,6 +442,8 @@ async function main(): Promise<void> {
     unavailableConfigPath = join(buildRoot, `.wrangler-smoke-${configToken}-no-cms.jsonc`);
     const unavailablePersistTo = join(stateRoot, "wrangler-no-cms-state");
     await writeFile(unavailableConfigPath, JSON.stringify(unavailableConfig, null, 2));
+    ui.section("Unavailable CMS boundary");
+    ui.note("Starting isolated Worker without a CMS binding (full Wrangler output follows)");
     const unavailableChild = spawn(process.execPath, ["run", "scripts/run-cf-dev.ts"], {
       cwd: REPO_ROOT,
       detached: process.platform !== "win32",
@@ -455,7 +463,7 @@ async function main(): Promise<void> {
     await waitForWorker(unavailableOrigin, unavailableChild, unavailableOutput, "/_emdash/admin/setup");
     const unavailableCms = await request(unavailableOrigin, "/_emdash/admin/setup");
     assertUnavailableCms(unavailableCms);
-    console.log(`PASS unavailable CMS setup boundary -> ${unavailableCms.status}`);
+    ui.success(`Unavailable CMS setup boundary → ${unavailableCms.status}`);
     await terminateOwnedProcess(unavailableChild);
     children.delete(unavailableChild);
     await waitForPortAvailable(unavailablePort);
@@ -466,11 +474,12 @@ async function main(): Promise<void> {
     await cleanupSmokeResources(children, [port, unavailablePort], stateRoot, [configPath, unavailableConfigPath].filter((path): path is string => path !== undefined));
     if (interruptedSignal) process.exitCode = interruptedSignal === "SIGINT" ? 130 : 143;
   }
+  ui.success("Worker smoke test complete");
 }
 
 if (import.meta.main) {
   await main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    ui.failure(error instanceof Error ? error.message : String(error));
     if (process.exitCode === undefined) process.exitCode = 1;
   });
 }

@@ -20,6 +20,7 @@ import {
   type ProvisioningJournal,
 } from "./setup-cloudflare-lib";
 import { promptSecretDetached, runProvisioning, type SetupRuntime } from "./setup-cloudflare";
+import { createTerminalUI, type TerminalUI } from "./terminal-ui";
 
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
 const ROOT = "/fake-project";
@@ -29,6 +30,38 @@ const MIGRATIONS = ["0001_newsletter.sql", "0002_resend_outbox.sql", "0003_resen
 
 const actualWranglerConfig = await readFile(join(import.meta.dir, "..", "wrangler.jsonc"), "utf8");
 const actualSiteConfig = await readFile(join(import.meta.dir, "..", "src/site.config.ts"), "utf8");
+
+describe("setup terminal progress", () => {
+  test("prints readable progress without terminal control codes when output is redirected", async () => {
+    let text = "";
+    const progress = createTerminalUI({ write: (chunk) => { text += chunk; } }, false);
+    progress.section("Cloudflare resources");
+    progress.note("D1 database ready: example-db");
+    expect(await progress.run("Checking Worker versions", async () => 42)).toBe(42);
+    expect(text).toContain("Cloudflare resources\n");
+    expect(text).toContain("D1 database ready: example-db");
+    expect(text).toContain("... Checking Worker versions\n");
+    expect(text).toContain("✓ Checking Worker versions\n");
+    expect(text).not.toContain("\x1b[");
+    expect(text).not.toContain("\r");
+  });
+
+  test("clears a TTY spinner and keeps the original error", async () => {
+    let text = "";
+    const progress = createTerminalUI({ write: (chunk) => { text += chunk; } }, true);
+    let caught: unknown;
+    try {
+      await progress.run("Checking Worker versions", async () => { throw new Error("Wrangler failed"); });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    if (caught instanceof Error) expect(caught.message).toBe("Wrangler failed");
+    expect(text).toContain("⠋ Checking Worker versions");
+    expect(text).toContain("! Checking Worker versions failed\n");
+    expect(text.endsWith("\n")).toBe(true);
+  });
+});
 
 class MemoryFileSystem implements ProvisioningFileSystem {
   readonly files = new Map<string, string>();
@@ -81,6 +114,7 @@ interface FakeOptions {
 }
 
 class FakeRuntime implements SetupRuntime {
+  progress?: TerminalUI;
   readonly fs = new MemoryFileSystem();
   readonly apiToken = "test-token";
   readonly approvedAccountId = ACCOUNT;
@@ -463,7 +497,15 @@ function isBootstrapDeploy(command: string[]) {
 describe("full resumable provisioning sequences", () => {
   test("provisions a fresh clone from the real wrangler config and persists the prepared deployment", async () => {
     const runtime = fullFreshRuntime();
+    let transcript = "";
+    runtime.progress = createTerminalUI({ write: (chunk) => { transcript += chunk; } }, false);
     await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(transcript).toContain("Cloudflare resources\n");
+    expect(transcript).toContain("Worker deployment\n");
+    expect(transcript).toContain("Building Astro site (full build output follows)");
+    expect(transcript).toContain("Final verification\n");
+    expect(runtime.interactiveCommands.some((command) => command.join(" ") === "bun run build")).toBe(true);
+    expect(transcript).not.toContain("\x1b[");
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
     expect(runtime.commands.some((command) => command.includes("r2") && command.includes("list"))).toBe(false);
     expect(runtime.commands.some((command) => command.includes("kv") && command.includes("list"))).toBe(false);

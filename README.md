@@ -1,5 +1,11 @@
 # minastro
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/minastro-dark.webp">
+  <source media="(prefers-color-scheme: light)" srcset="images/minastro-light.webp">
+  <img alt="Minastro personal-site homepage with navigation, writing, and project sections" src="images/minastro-light.webp">
+</picture>
+
 A personal-site theme built with Astro and [EmDash](https://emdashcms.com), running server-side on Cloudflare Workers. EmDash is a Git-free CMS that stores your content in Cloudflare D1 and media in R2, so everything — posts, projects, pages, settings — is editable from a built-in admin at `/_emdash/admin`. Out of the box you get a blog, a project portfolio, CMS-managed pages, search, RSS, tags, comments, and an optional newsletter.
 
 ## Features
@@ -92,7 +98,10 @@ Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.
 
 ## Set up with an agent
 
-Open a coding agent in your scaffolded site directory (the new project `create-astro` created, not the upstream template source) and paste:
+Open a coding agent in your scaffolded site directory (the new project `create-astro` created, not the upstream template source), expand the prompt below, and paste it:
+
+<details>
+<summary>Copy the agent setup prompt</summary>
 
 ```text
 Set up my Minastro site from this scaffold. Operate in this standalone project
@@ -162,6 +171,8 @@ Once the site is deployed, complete /_emdash/admin/setup on that final origin
 only — never register the production passkey on a workers.dev origin.
 ```
 
+</details>
+
 You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. Hand the agent `AGENTS.md` and [docs/operations.md](docs/operations.md) for the full runbook.
 
 ## How content works
@@ -194,6 +205,7 @@ The bundled `.emdash/seed.json` initializes empty databases only — it never up
 | `bun run seed:validate` | Validate `.emdash/seed.json` |
 | `bun run types:generate` | Regenerate `.emdash/types.ts` and `.emdash/schema.json` |
 | `bun run --env-file=.env.cloudflare.local cloudflare:setup` | Provision with an approved account-scoped token from the ignored `.env.cloudflare.local` and safely resume the prepared-version deployment |
+| `bun run preview:setup` | Preview setup progress and run a real local build without contacting Cloudflare |
 | `bun run test:setup` | Run failure-injection tests for resumable provisioning |
 | `bun run smoke:worker` | Start isolated local Worker bindings and smoke-test setup/runtime boundaries |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |

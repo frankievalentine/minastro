@@ -1,6 +1,9 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { validateOperatorOrigin } from "../src/lib/newsletter-operator";
+import { createTerminalUI } from "./terminal-ui";
+
+const ui = createTerminalUI();
 
 const args = process.argv.slice(2);
 const mode = args[0] === "--local-only" ? "local_only" : args[0] === "--rebind" ? "rebind" : "resend";
@@ -52,29 +55,31 @@ async function request(path: string, init: RequestInit = {}): Promise<Record<str
 }
 
 try {
-  console.log(`Approved operator origin: ${origin}`);
-  const preview = await request(`?subscriber_id=${subscriberId}`);
-  console.log(`Subscriber ID: ${subscriberId}`);
-  console.log(`Current status: ${String(preview.status)}`);
-  console.log(`Subscriber rows to remove: 1`);
-  console.log(`Audit rows to remove: ${String(preview.audit_row_count)}`);
-  console.log(`Outbox rows to remove: ${String(preview.outbox_row_count)}`);
-  console.log(`Outbox operation/state: ${String(preview.outbox_operation)} / ${String(preview.outbox_state)}`);
-  console.log(`Remote checkpoint: ${String(preview.remote_state)}`);
-  console.log(`Remote contact checkpoint saved: ${preview.contact_id_saved === true ? "yes" : "no"}`);
-  console.log("Remote action: resolve the retained contact, delete it by immutable ID, and verify absence.");
-  console.log("Local action: delete subscriber, audit, and outbox rows after remote verification.");
+  ui.section("Newsletter erasure");
+  ui.note(`Approved operator origin: ${origin}`);
+  const preview = await ui.run("Loading erasure preview", () => request(`?subscriber_id=${subscriberId}`));
+  ui.section("Impact and approval");
+  ui.note(`Subscriber ID: ${subscriberId}`);
+  ui.note(`Current status: ${String(preview.status)}`);
+  ui.note("Subscriber rows to remove: 1");
+  ui.note(`Audit rows to remove: ${String(preview.audit_row_count)}`);
+  ui.note(`Outbox rows to remove: ${String(preview.outbox_row_count)}`);
+  ui.note(`Outbox operation/state: ${String(preview.outbox_operation)} / ${String(preview.outbox_state)}`);
+  ui.note(`Remote checkpoint: ${String(preview.remote_state)}`);
+  ui.note(`Remote contact checkpoint saved: ${preview.contact_id_saved === true ? "yes" : "no"}`);
+  ui.note("Remote action: resolve the retained contact, delete it by immutable ID, and verify absence.");
+  ui.note("Local action: delete subscriber, audit, and outbox rows after remote verification.");
 
   const readline = createInterface({ input, output });
   const approvalWord = mode === "local_only" ? "ERASE_LOCAL_ONLY" : mode === "rebind" ? "REBIND_SAME_ACCOUNT" : "ERASE";
   const approval = await readline.question(`Type ${approvalWord} to approve this request: `);
   readline.close();
   if (approval !== approvalWord) {
-    console.log("Erasure request cancelled.");
+    ui.note("Erasure request cancelled");
     process.exit(0);
   }
 
-  const result = await request("", {
+  const result = await ui.run("Submitting approved erasure request", () => request("", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -82,9 +87,9 @@ try {
       approval,
       ...(mode === "rebind" ? { mode: "rebind" } : mode === "local_only" ? { mode: "local_only" } : {}),
     }),
-  });
-  console.log(`Erasure request: ${String(result.status)}`);
+  }));
+  ui.success(`Erasure request: ${String(result.status)}`);
 } catch (error) {
-  console.error(error instanceof Error ? error.message : "Erasure request failed");
+  ui.failure(error instanceof Error ? error.message : "Erasure request failed");
   process.exitCode = 1;
 }

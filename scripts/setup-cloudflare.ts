@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { createTerminalUI, type TerminalUI } from "./terminal-ui";
 
 import {
   JOURNAL_DIRECTORY,
@@ -59,6 +60,7 @@ export interface SetupRuntime {
   prompt: Prompt;
   promptSecret: Prompt;
   handoff: (origin: string, secret: string) => Promise<HandoffResult>;
+  progress?: TerminalUI;
   close?: () => void;
 }
 
@@ -256,6 +258,7 @@ function defaultRuntime(readline: ReturnType<typeof createInterface>): SetupRunt
   let activeReadline = readline;
   const recreateReadline = () => createInterface({ input, output });
   return {
+    progress: createTerminalUI(output, Boolean(output.isTTY)),
     fs: defaultProvisioningFileSystem(),
     apiToken: process.env.CLOUDFLARE_API_TOKEN,
     approvedAccountId: process.env.CLOUDFLARE_ACCOUNT_ID,
@@ -371,8 +374,27 @@ function wranglerOptions(runtime: SetupRuntime, account: string, options: Comman
   return { ...options, env: { ...options.env, CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } };
 }
 
+function withProgress<T>(runtime: SetupRuntime, label: string, operation: () => Promise<T>): Promise<T> {
+  return runtime.progress ? runtime.progress.run(label, operation) : operation();
+}
+
 async function runWrangler(runtime: SetupRuntime, root: string, account: string, args: string[], options: CommandOptions = {}) {
-  return runtime.run(wranglerCommand(root, args), wranglerOptions(runtime, account, options));
+  const action = () => runtime.run(wranglerCommand(root, args), wranglerOptions(runtime, account, options));
+  return options.quiet ? withProgress(runtime, wranglerProgressLabel(args), action) : action();
+}
+
+function wranglerProgressLabel(args: string[]): string {
+  if (args[0] === "d1" && args[1] === "list") return "Checking D1 databases";
+  if (args[0] === "d1" && args[1] === "create") return `Creating D1 database ${args[2]}`;
+  if (args[0] === "d1" && args[1] === "execute") return "Checking D1 database state";
+  if (args[0] === "d1" && args[1] === "migrations") return "Applying newsletter migrations";
+  if (args[0] === "r2" && args[1] === "bucket" && args[2] === "create") return `Creating R2 bucket ${args[3]}`;
+  if (args[0] === "kv" && args[1] === "namespace" && args[2] === "create") return `Creating KV namespace ${args[3]}`;
+  if (args[0] === "versions" && args[1] === "secret" && args[2] === "put") return `Uploading Worker secret ${args[3]}`;
+  if (args[0] === "versions" && args[1] === "view") return "Checking Worker version";
+  if (args[0] === "versions" && args[1] === "list") return "Checking Worker versions";
+  if (args[0] === "deployments" && args[1] === "list") return "Checking Worker deployments";
+  return "Running Wrangler check";
 }
 
 async function runWranglerInteractive(runtime: SetupRuntime, root: string, account: string, args: string[], options: CommandOptions = {}) {
@@ -463,26 +485,25 @@ function databaseStateLabel(state: DatabaseState): Plan["cmsState"] {
 }
 
 function planSummary(plan: Plan) {
-  return JSON.stringify({
-    workerName: plan.workerName,
-    d1Name: plan.d1Name,
-    r2Name: plan.r2Name,
-    kvTitle: plan.kvTitle,
-    canonicalOrigin: plan.canonicalOrigin,
-    cmsState: plan.cmsState,
-    bootstrapRequested: plan.bootstrapRequested,
-    newsletter: plan.newsletter.enabled ? {
-      enabled: true,
-      newFeature: plan.newsletter.newFeature,
-      databaseName: plan.newsletter.databaseName,
-      senderAddress: plan.newsletter.senderAddress,
-      turnstileSiteKey: plan.newsletter.turnstileSiteKey,
-      expectedHostname: plan.newsletter.expectedHostname,
-      consentVersion: plan.newsletter.consentVersion,
-      rateLimitNamespaceId: plan.newsletter.rateLimitNamespaceId,
-    } : { enabled: false },
-    resend: plan.resend.enabled ? { enabled: true, segmentId: plan.resend.segmentId } : { enabled: false },
-  }, null, 2);
+  const lines = [
+    `  Worker: ${plan.workerName} (${plan.newCore ? "new" : "configured"})`,
+    `  Custom domain: ${plan.canonicalOrigin}`,
+    `  CMS D1 database: ${plan.d1Name}`,
+    `  Media R2 bucket: ${plan.r2Name}`,
+    `  Session KV namespace: ${plan.kvTitle}`,
+    `  CMS state: ${plan.cmsState}`,
+    `  First-admin bootstrap: ${plan.bootstrapRequested ? "requested" : "off"}`,
+    `  Newsletter: ${plan.newsletter.enabled ? plan.newsletter.newFeature ? "new" : "configured" : "off"}`,
+  ];
+  if (plan.newsletter.enabled) lines.push(
+    `    D1 database: ${plan.newsletter.databaseName}`,
+    `    Sender: ${plan.newsletter.senderAddress}`,
+    `    Turnstile: ${plan.newsletter.turnstileSiteKey} for ${plan.newsletter.expectedHostname}`,
+    `    Consent version: ${plan.newsletter.consentVersion}`,
+    `    Rate-limit namespace: ${plan.newsletter.rateLimitNamespaceId}`,
+  );
+  lines.push(`  Resend sync: ${plan.resend.enabled ? `segment ${plan.resend.segmentId}` : "off"}`);
+  return lines.join("\n");
 }
 
 async function promptPlan(runtime: SetupRuntime, config: Record<string, unknown>, siteSource: string, existing: ProvisioningJournal | undefined, workerOverride: string, coreState: CoreState, databaseState: DatabaseState | undefined): Promise<Plan> {
@@ -1195,6 +1216,7 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
   }
   assertBoundedTag(prepared.tag, "Prepared version");
   try {
+    runtime.progress?.note("Building Astro site (full build output follows)");
     await runtime.runInteractive(["bun", "run", "build"], { env: { CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } });
     const builtConfig = join(root, "dist/server/wrangler.json");
     if (await runtime.fs.read(builtConfig) === null) throw new Error("The Astro build did not produce dist/server/wrangler.json; refusing to upload with the template config.");
@@ -1276,9 +1298,9 @@ async function ensureWorkerResource(runtime: SetupRuntime, journal: Provisioning
   await resolveJournalResource(runtime, journal, journalPath, "worker", {
     kind: "Worker",
     intendedName: plan.workerName,
-    list: () => listWorkers(runtime, account),
+    list: () => withProgress(runtime, "Checking Workers", () => listWorkers(runtime, account)),
     identity: (resource) => resource,
-    create: () => createWorker(runtime, account, plan.workerName),
+    create: () => withProgress(runtime, `Creating Worker ${plan.workerName}`, () => createWorker(runtime, account, plan.workerName)),
   });
 }
 
@@ -1441,6 +1463,7 @@ export interface ProvisioningOptions {
 export async function runProvisioning(options: ProvisioningOptions): Promise<void> {
   const runtime = options.runtime;
   const root = options.projectRoot ?? PROJECT_ROOT;
+  runtime.progress?.section("Cloudflare account");
   if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required and must be supplied through the environment; setup never stores it.");
   const configPath = join(root, "wrangler.jsonc");
   const sitePath = join(root, "src/site.config.ts");
@@ -1455,7 +1478,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
   const approvedAccount = accountId(requestedAccount);
   if (configuredAccount && configuredAccount !== approvedAccount) throw new Error("wrangler.jsonc account_id conflicts with the approved Cloudflare account.");
   if (!/^y(es)?$/i.test((await runtime.prompt(`Use approved Cloudflare account ${approvedAccount}? [y/N] `)).trim())) throw new Error("Cloudflare account approval was not confirmed.");
-  await verifyAccount(runtime, approvedAccount);
+  await withProgress(runtime, "Verifying account access", () => verifyAccount(runtime, approvedAccount));
   const coreState = coreConfigurationState(config);
   const configuredWorker = typeof config.name === "string" && config.name !== WORKER_PLACEHOLDER ? normalizeName(config.name) : "";
   const workerCandidate = configuredWorker || normalizeName(await runtime.prompt("Worker name [my-site]: ") || "my-site");
@@ -1463,6 +1486,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
   const provisioningRoot = join(root, JOURNAL_DIRECTORY);
   const release = await runtime.fs.acquireExclusive(provisioningLockPath(provisioningRoot, approvedAccount, workerCandidate));
   try {
+    runtime.progress?.section("Plan and approval");
     const path = provisioningJournalPath(provisioningRoot, approvedAccount, workerCandidate);
     let journal = await loadProvisioningJournal(runtime.fs, path);
     const resumed = Boolean(journal);
@@ -1488,6 +1512,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
       await save(runtime, path, journal);
     }
 
+    runtime.progress?.section("Cloudflare resources");
     const coreD1 = await resolveJournalResource(runtime, journal, path, "coreD1", {
       kind: "D1 database",
       intendedName: plan.d1Name,
@@ -1495,20 +1520,23 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
       identity: (resource) => resource,
       create: () => runWrangler(runtime, root, approvedAccount, ["d1", "create", plan.d1Name], { quiet: true }).then(() => undefined),
     });
+    runtime.progress?.note(`D1 database ready: ${coreD1.name}`);
     const media = await resolveJournalResource(runtime, journal, path, "media", {
       kind: "R2 bucket",
       intendedName: plan.r2Name,
-      list: () => listR2(runtime, approvedAccount),
+      list: () => withProgress(runtime, "Checking R2 buckets", () => listR2(runtime, approvedAccount)),
       identity: (resource) => resource,
       create: () => runWrangler(runtime, root, approvedAccount, ["r2", "bucket", "create", plan.r2Name], { quiet: true }).then(() => undefined),
     });
+    runtime.progress?.note(`R2 bucket ready: ${media.name}`);
     const session = await resolveJournalResource(runtime, journal, path, "session", {
       kind: "KV namespace",
       intendedName: plan.kvTitle,
-      list: () => listKv(runtime, approvedAccount),
+      list: () => withProgress(runtime, "Checking KV namespaces", () => listKv(runtime, approvedAccount)),
       identity: (resource) => resource,
       create: () => runWrangler(runtime, root, approvedAccount, ["kv", "namespace", "create", plan.kvTitle], { quiet: true }).then(() => undefined),
     });
+    runtime.progress?.note(`KV namespace ready: ${session.name}`);
     let newsletterDb: Resource | undefined;
     if (plan.newsletter.enabled) {
       if (!journal.resources.newsletterDb) {
@@ -1522,6 +1550,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
         identity: (resource) => resource,
         create: () => runWrangler(runtime, root, approvedAccount, ["d1", "create", plan.newsletter.databaseName], { quiet: true }).then(() => undefined),
       });
+      runtime.progress?.note(`Newsletter D1 database ready: ${newsletterDb.name}`);
     }
 
     const nextConfig = reconcileWranglerConfig(configSource, {
@@ -1545,8 +1574,10 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     journal.milestones.siteReconciled = true;
     await save(runtime, path, journal);
 
+    runtime.progress?.section("Worker deployment");
     const expectedBindings = requiredBindings(plan, { coreD1, media, session, newsletterDb });
     await ensureWorkerResource(runtime, journal, path, approvedAccount, plan);
+    runtime.progress?.note(`Worker ready: ${plan.workerName}`);
     await establishWorker(runtime, journal, path, root, approvedAccount, plan, expectedBindings);
     const currentState = await inspectDatabaseInitialization(runtime, root, approvedAccount, plan.d1Name);
     plan.cmsState = databaseStateLabel(currentState);
@@ -1597,11 +1628,13 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
       await deployPreparedVersion(runtime, journal, path, root, approvedAccount, plan, expectedBindings, "final");
     }
     await deployTriggers(runtime, journal, path, root, approvedAccount, plan);
-    await verifyCanonicalOrigin(runtime, approvedAccount, plan, sitePath, !currentState.established, journal.milestones.triggersDeployed);
+    runtime.progress?.section("Final verification");
+    await withProgress(runtime, "Verifying custom domain and site response", () => verifyCanonicalOrigin(runtime, approvedAccount, plan, sitePath, !currentState.established, journal.milestones.triggersDeployed));
     journal.milestones.canonicalVerified = true;
     await save(runtime, path, journal);
     await completeBootstrapHandoff(runtime, journal, path, plan, bootstrapSecret);
-    console.log(`Provisioning complete for ${plan.workerName} at ${plan.canonicalOrigin}.`);
+    if (runtime.progress) runtime.progress.success(`Provisioning complete for ${plan.workerName} at ${plan.canonicalOrigin}`);
+    else console.log(`Provisioning complete for ${plan.workerName} at ${plan.canonicalOrigin}.`);
   } finally {
     await release();
   }
@@ -1614,7 +1647,7 @@ export function createDefaultRuntime(): SetupRuntime {
 if (import.meta.main) {
   const runtime = createDefaultRuntime();
   runProvisioning({ runtime }).catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+    runtime.progress?.failure(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   }).finally(() => {
     runtime.close?.();
