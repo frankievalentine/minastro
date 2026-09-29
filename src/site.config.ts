@@ -10,8 +10,9 @@ export interface SiteConfig {
   newsletter: {
     enabled: boolean;
     description?: string;
-    /** Verified sender address for transactional emails. Must match an address
-     *  in the send_email binding's allowed_sender_addresses. */
+    /** Sender address for transactional emails. It must belong to your onboarded
+     *  Email Sending domain; the address itself needs no separate verification.
+     *  Setup writes it into the send_email binding's allowed_sender_addresses. */
     senderAddress: string;
     /** Public Turnstile site key for widget rendering. */
     turnstileSiteKey?: string;

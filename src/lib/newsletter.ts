@@ -889,7 +889,7 @@ export async function unsubscribeSubscriber(
  * @param name        - Optional recipient name (used for personalisation).
  * @param confirmToken- The raw (unhashed) confirmation token for the link.
  * @param origin      - Trusted site origin for the confirmation link.
- * @param senderAddress- Verified sender address from site config.
+ * @param senderAddress- Sender address from site config; must belong to the onboarded Email Sending domain.
  */
 export async function sendConfirmationEmail(
   bindings: NewsletterEnv,

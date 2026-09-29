@@ -466,7 +466,7 @@ async function promptPlan(runtime: SetupRuntime, config: Record<string, unknown>
     newFeature: !newsletterBinding,
     databaseName: typeof newsletterBinding?.database_name === "string" ? newsletterBinding.database_name : `${workerName}-newsletter`,
     databaseId: typeof newsletterBinding?.database_id === "string" && newsletterBinding.database_id !== D1_PLACEHOLDER ? newsletterBinding.database_id : undefined,
-    senderAddress: emailAddress(!senderCandidate || senderCandidate === "newsletter@your-domain.com" ? await runtime.prompt("Verified newsletter sender address: ") : senderCandidate),
+    senderAddress: emailAddress(!senderCandidate || senderCandidate === "newsletter@your-domain.com" ? await runtime.prompt("Newsletter sender address (at your onboarded Email Sending domain): ") : senderCandidate),
     turnstileSiteKey: textConfigValue(siteSource, "turnstileSiteKey") || (await runtime.prompt("Turnstile site key: ")).trim(),
     expectedHostname: hostname(!hostnameCandidate || hostnameCandidate === "your-domain.com" ? await runtime.prompt("Turnstile hostname: ") : hostnameCandidate),
     consentVersion: textConfigValue(siteSource, "consentVersion") || "1.0",

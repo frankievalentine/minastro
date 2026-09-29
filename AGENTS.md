@@ -117,12 +117,25 @@ machine-readable output or a documented API response instead.
 
 Secrets are stored in Cloudflare, never committed. `.dev.vars` is ignored and
 is only for local development; it cannot create Cloudflare bindings. The
-newsletter setup is optional and needs a verified Email Sending domain,
+newsletter setup is optional and needs an onboarded Email Sending domain,
 Turnstile keys, and a Rate Limiting namespace. Skip it unless those values are
-available and the deployment explicitly includes newsletter signup. Manual
-responsibilities remain with the user: authentication and account choice,
-resource approval, external domain/zone ownership, passkey registration, and
-any optional newsletter or third-party credentials.
+available and the deployment explicitly includes newsletter signup.
+
+Email Sending domain onboarding is the only sender prerequisite. A domain must
+be onboarded (with its required DNS records) before its addresses can send, but
+an individual sender mailbox/address is not separately verified: any address at
+the onboarded domain may send. `allowed_sender_addresses` on the `send_email`
+binding is an optional restriction on which addresses the binding accepts, not
+a verification or approval step, and `bun run cloudflare:setup` writes the
+chosen `senderAddress` into it automatically. Do not ask the user to verify or
+approve an individual sender address, and do not ask them to edit
+`allowed_sender_addresses` by hand; confirm only that the sender's domain is
+onboarded for Email Sending.
+
+Manual responsibilities remain with the user: authentication and account
+choice, resource approval, external domain/zone ownership, domain onboarding
+for Email Sending, passkey registration, and any optional third-party
+credentials.
 
 After initial provisioning, use `bun run cf:dev` for Worker-compatible local
 testing and `bun run cf:deploy` for later deployments.

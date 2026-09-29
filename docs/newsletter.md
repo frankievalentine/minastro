@@ -43,7 +43,7 @@ on Cloudflare D1 (for storage) and Cloudflare Email Sending (for delivery).
 newsletter: {
   enabled: false,              // set to true when ready
   description: "Occasional notes on engineering, projects, and ideas. No spam.",
-  senderAddress: "newsletter@your-domain.com",  // must match allowed_sender_addresses
+  senderAddress: "newsletter@your-domain.com",  // any address at your onboarded Email Sending domain
   turnstileSiteKey: "",        // public Turnstile site key (written here by setup)
   consentVersion: "1.0",       // bump when privacy policy changes
   expectedHostname: "your-domain.com",  // must match Turnstile widget domain
@@ -54,7 +54,7 @@ newsletter: {
 |---|---|
 | `enabled` | Master toggle. When `false`, the public page shows a disabled setup state and subscription requests remain unavailable. |
 | `description` | Shown below the subscribe form to set expectations. |
-| `senderAddress` | Verified sender address for transactional emails. Must match an address in the `send_email` binding's `allowed_sender_addresses`. |
+| `senderAddress` | Sender address for transactional emails. It must belong to your onboarded Email Sending domain; no separate per-address verification is required. Setup writes it into the `send_email` binding's `allowed_sender_addresses` automatically. |
 | `turnstileSiteKey` | Public Turnstile site key rendered in the widget. **Required when newsletter is enabled.** |
 | `consentVersion` | Semver string identifying the consent version the subscriber agreed to. Increment when your privacy policy changes. Existing subscribers retain the version they agreed to. |
 | `expectedHostname` | The hostname Turnstile validates against. Must match the domain where the widget is rendered. |
@@ -101,7 +101,7 @@ Run `bun run cloudflare:setup` after provisioning the core site. The command off
 
 Before accepting that phase, complete these account-level prerequisites:
 
-1. Onboard and verify the sender domain in Cloudflare Email Sending, including its required DNS records.
+1. Onboard the sender domain in Cloudflare Email Sending, including its required DNS records. Onboarding the domain is the only sender prerequisite; the individual sender address is not separately verified or approved.
 2. Create a Turnstile widget for the newsletter hostname and have its public site key and private secret ready. The command accepts the secret through no-echo input and never writes it to the repository or journal.
 3. Obtain a positive Cloudflare Workers Rate Limiting namespace ID for `NEWSLETTER_SUBSCRIBE_LIMITER`.
 
