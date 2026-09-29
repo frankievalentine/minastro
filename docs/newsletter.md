@@ -63,7 +63,7 @@ newsletter: {
 
 | Variable | Source | Required | Purpose |
 |---|---|---|---|
-| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile dashboard | Yes (when newsletter enabled) | Server-side verification of Turnstile tokens. Set via `bunx wrangler secret put TURNSTILE_SECRET_KEY`. |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile dashboard | Yes (when newsletter enabled) | Server-side verification of Turnstile tokens. Set via `bunx wrangler secret put TURNSTILE_SECRET_KEY --name <WORKER_NAME>`. |
 
 ### Bindings (wrangler config)
 
@@ -101,7 +101,9 @@ full flow.
 
 ### Recommended setup flow
 
-Run `bun run cloudflare:setup` after provisioning the core site. The command offers an opt-in newsletter phase that creates `NEWSLETTER_DB`, writes the D1, Email Sending, and rate-limit bindings, applies and verifies the remote migration, adds `TURNSTILE_SECRET_KEY` and the export token through masked prompts and `wrangler versions secret put`, writes the public Turnstile configuration to `src/site.config.ts`, enables the newsletter, and deploys the prepared version only after those prerequisites are verified. It uses the approved account-scoped Cloudflare token described in [the operations guide](operations.md); the token is never stored or logged.
+Pass `--newsletter` to opt in: `bun run cloudflare:setup --newsletter`. Without the flag the newsletter resources stay off, even when `src/site.config.ts` is ready for them. The newsletter phase creates `NEWSLETTER_DB`, writes the D1, Email Sending, and rate-limit bindings, applies and verifies the remote migration, adds `TURNSTILE_SECRET_KEY` and the export token through masked prompts and `wrangler versions secret put`, writes the public Turnstile configuration to `src/site.config.ts`, enables the newsletter, and deploys the prepared version only after those prerequisites are verified. It uses the approved Cloudflare account credentials described in [the operations guide](operations.md) - the Wrangler login session by default, or an account-scoped token when one is supplied - and never stores or logs them.
+
+You can add the newsletter later instead of at first provisioning. Once the base site deployment is complete (deployed, triggers applied, canonical origin verified), rerun `bun run cloudflare:setup --newsletter`: setup reuses the existing Worker, D1, R2, and KV resources, adds the newsletter resources, and asks you to approve the expanded plan before it creates anything.
 
 Before accepting that phase, complete these account-level prerequisites:
 
@@ -516,7 +518,7 @@ GET /api/newsletter/admin/subscribers.csv
 Authorization: Bearer <NEWSLETTER_ADMIN_TOKEN>
 ```
 
-The response is uncached, excludes all confirmation and unsubscribe tokens, and contains `email`, `name`, `consent_version`, `first_confirmed_at`, and `created_at`. Set `NEWSLETTER_ADMIN_TOKEN` through the setup command or `wrangler secret put NEWSLETTER_ADMIN_TOKEN`; keep it in a password manager.
+The response is uncached, excludes all confirmation and unsubscribe tokens, and contains `email`, `name`, `consent_version`, `first_confirmed_at`, and `created_at`. Set `NEWSLETTER_ADMIN_TOKEN` through the setup command or `wrangler secret put NEWSLETTER_ADMIN_TOKEN --name <WORKER_NAME>`; keep it in a password manager.
 
 ---
 
@@ -529,14 +531,14 @@ bunx wrangler d1 migrations apply NEWSLETTER_DB --local
 # Apply migration (remote/production)
 bunx wrangler d1 migrations apply NEWSLETTER_DB --remote
 
-# Set Turnstile secret
-bunx wrangler secret put TURNSTILE_SECRET_KEY
+# Set Turnstile secret (always pass the provisioned Worker name)
+bunx wrangler secret put TURNSTILE_SECRET_KEY --name <WORKER_NAME>
 
 # Set the protected CSV export token
-bunx wrangler secret put NEWSLETTER_ADMIN_TOKEN
+bunx wrangler secret put NEWSLETTER_ADMIN_TOKEN --name <WORKER_NAME>
 
 # Set the optional Resend Segment synchronization key
-bunx wrangler secret put RESEND_API_KEY
+bunx wrangler secret put RESEND_API_KEY --name <WORKER_NAME>
 
 # Request an approved cross-system erasure through the operator endpoint
 NEWSLETTER_OPERATOR_URL=https://your-domain.com \

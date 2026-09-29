@@ -23,37 +23,49 @@ missing hostname — and must be replaced with your canonical HTTPS URL before
 any production deployment. Do not run any step in this guide to make local
 development work.
 
-Local first-admin setup still requires a local Base64URL secret because setup is
-fail-closed without one. Generate one without ordinary Base64 padding or
-characters with:
+`bun run cf:dev` provides its own temporary local bootstrap secret and opens the
+authorized setup page, so local first-admin setup needs no manual step and no
+`.dev.vars` entry. The bootstrap URL redirects to a clean setup URL before the
+wizard loads, so you do not need to keep the initial URL; the credential stays
+reusable until the secret is changed or removed, or - for the temporary local
+secret - until the local Worker restarts.
 
-```sh
-openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
-```
-
-Store the result outside the repository and set
-`EMDASH_BOOTSTRAP_SECRET=<generated-base64url-value>` in the ignored `.dev.vars`
-file **before** running `bun run cf:dev`. Open the setup URL with the `bootstrap`
-query parameter containing that value once, and let the redirect remove the
-parameter before completing the wizard. A missing or invalid value intentionally
-returns an authorization error.
+`.dev.vars` remains optional and is only for pinning your own local values (a
+fixed `EMDASH_BOOTSTRAP_SECRET`, an `EMDASH_ENCRYPTION_KEY`, newsletter keys) or
+for trying other local options. Presence of the file is what matters: while a
+`.dev.vars` file exists, `cf:dev` does not mint its own secret, so the file must
+contain a usable 32+ byte `EMDASH_BOOTSTRAP_SECRET` and you open the setup URL
+with that value yourself. An empty or too-short value leaves local setup
+unavailable (HTTP 503) until you either set a valid value or delete the file, and
+deleting the file restores the automatic handoff.
 
 ## 0. Provisioning gate (read before any setup)
 
 Never provision, attach a domain, or deploy without explicit approval.
 
-1. Obtain the explicitly approved 32-character Cloudflare account ID and confirm
-   that it is the intended account.
-2. Supply an account-scoped `CLOUDFLARE_API_TOKEN` for this setup run. The token
-   must have only the permissions required for this setup: Account Settings
-   Read, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit, and Workers
-   Scripts Edit. Workers Routes Edit is also required for a standard production
+1. Confirm the intended Cloudflare account. Setup discovers the accounts your
+   Wrangler login can reach, asks when more than one matches, shows the chosen
+   account in the printed plan, and accepts `--account <id>` to pin the
+   32-character account ID up front.
+2. Provide Cloudflare authentication for this setup run. The default is the
+   account you signed in with:
+
+   ```sh
+   npx wrangler login
+   ```
+
+   Setup captures that OAuth session itself and offers to run the login if no
+   session exists. No credential file is required.
+
+   An account-scoped `CLOUDFLARE_API_TOKEN` is the alternative. It must have
+   only the permissions required for this setup: Account Settings Read, D1
+   Edit, Workers R2 Storage Edit, Workers KV Storage Edit, and Workers Scripts
+   Edit. Workers Routes Edit is also required for a standard production
    deployment, because setup attaches the custom domain.
 
-   Preferred: create the ignored `.env.cloudflare.local` from the tracked
-   example without copying any secrets by hand, then fill in
-   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in your editor and let
-   the run load it:
+   To supply it, create the ignored `.env.cloudflare.local` from the tracked
+   example, fill in `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in your
+   editor, and let the run load it:
 
    ```sh
    install -m 600 .env.cloudflare.local.example .env.cloudflare.local
@@ -79,42 +91,47 @@ Never provision, attach a domain, or deploy without explicit approval.
    in an active Cloudflare zone owned by that account.
 4. Obtain explicit approval before creating resources, attaching the custom
    domain, or deploying.
-5. Generate both deployment secrets with OpenSSL and save the resulting *values* in a
+5. Generate both deployment secrets and save the resulting *values* in a
    password manager before the setup run. Save the values themselves, not the
    commands. Setup prompts for each saved value through hidden input; it does
    not generate them for you.
 
-   `EMDASH_ENCRYPTION_KEY` must match EmDash's `emdash_enc_v1_` envelope:
-   the prefix followed by 43 unpadded base64url characters (32 random bytes,
-   alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`). Generate the body and prepend the
-   prefix:
+   `EMDASH_ENCRYPTION_KEY` must match EmDash's `emdash_enc_v1_` envelope: the
+   prefix followed by 43 unpadded base64url characters (32 random bytes,
+   alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`). EmDash's own generator prints a
+   correctly formatted value:
 
    ```sh
-   printf 'emdash_enc_v1_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+   npx emdash secrets generate
    ```
 
    `EMDASH_BOOTSTRAP_SECRET` is a raw base64url body with no prefix:
 
    ```sh
-   openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+   printf '%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
    ```
 
    Store both values in the password manager. Never commit them, never paste
    them into a chat, and never pass them on a command line. Losing the
    encryption key permanently loses every secret encrypted with it.
-6. Only then set `src/site.config.ts` to `https://<HOSTNAME>` and add
-   `{ "pattern": "<HOSTNAME>", "custom_domain": true }` to `routes` in
-   `wrangler.jsonc`.
+6. Only then set `src/site.config.ts` to `https://<HOSTNAME>`, or answer the
+   `Canonical HTTPS origin:` prompt during setup, which writes the same value.
+   You do not edit `wrangler.jsonc` by hand: setup reconciles `account_id`, the
+   Worker name, the D1/R2/KV binding IDs, the newsletter bindings when enabled,
+   and the custom-domain `routes` entry, and it refuses to proceed on a
+   conflicting configured value.
 
 Run `bun run cloudflare:setup` only from the scaffolded site project being
-deployed in an interactive terminal. The command requires the approved account
-ID and token, verifies the account through the Cloudflare API, writes the
-account ID into the Wrangler configuration without storing the token, and binds
-every Wrangler operation to that configuration/account. It uses account APIs
-for R2 and KV discovery and never parses unsupported human-oriented list
-output. Do not deploy while placeholder IDs remain in `wrangler.jsonc`; the
-setup script rejects partial or unrecognized core bindings. Registrar transfers
-and DNS hosted outside Cloudflare cannot be automated here.
+deployed in an interactive terminal. The command requires the approved account,
+verifies it through the Cloudflare API, writes the account ID into the Wrangler
+configuration without storing any credential, and binds every Wrangler
+operation to that configuration/account. It uses the Wrangler login session by
+default and an account-scoped token when one is supplied; it never reads
+Wrangler's credential files itself. It uses account APIs for R2 and KV
+discovery and never parses unsupported human-oriented list output. Do not deploy
+while placeholder IDs remain in `wrangler.jsonc`; the setup script rejects
+partial or unrecognized core bindings. Registrar transfers and DNS hosted
+outside Cloudflare cannot be automated here.
 
 Before deployment, verify that `src/site.config.ts` contains the final HTTPS
 canonical origin. The script refuses to deploy without it and never uses a
@@ -124,9 +141,12 @@ normal prompts and output.
 Provisioning is resumable. The command writes only non-secret state to an
 atomic journal under `.wrangler/provisioning/` and revalidates every remote
 resource before continuing. It never generates `EMDASH_ENCRYPTION_KEY` or
-`EMDASH_BOOTSTRAP_SECRET` for you: it prompts for the saved OpenSSL values
-(§0 step 5) through hidden input and keeps only their journal state, never the
-values.
+`EMDASH_BOOTSTRAP_SECRET` for you: it prompts for the saved values (§0 step 5)
+through hidden input and keeps only their journal state, never the values.
+Nothing is created until you approve the printed plan; that single approval
+covers the account, the derived resource names, the custom domain, the
+deployment, and the cron triggers. There is no separate account, deployment, or
+trigger re-approval.
 
 On a genuinely new Worker, Wrangler's `versions upload` needs one prior
 deployment to exist, so setup first deploys an inert base Worker: a generated
@@ -180,11 +200,12 @@ removed automatically; confirm no setup process is running before removing it
 manually.
 
 Before uploading `EMDASH_ENCRYPTION_KEY` and, for a first-admin bootstrap,
-`EMDASH_BOOTSTRAP_SECRET`, the script prompts for each saved OpenSSL value
-(§0 step 5) through hidden input: nothing is echoed, logged, or written to disk,
-and the raw base64url is uploaded with `wrangler versions secret put` to the
-prepared version. An empty value is rejected and setup never invents a
-replacement.
+`EMDASH_BOOTSTRAP_SECRET`, the script prompts for each saved value (§0 step 5)
+through hidden input: nothing is echoed, logged, or written to disk, and the
+raw base64url is uploaded with `wrangler versions secret put` to the prepared
+version. If `EMDASH_ENCRYPTION_KEY` is already set on the approved Worker, setup
+inherits it instead of prompting. An empty value is rejected and setup never
+invents a replacement.
 It opens the bootstrap URL on that canonical origin in the
 default browser; if that is unavailable, it copies the URL to the clipboard
 without printing it. Complete setup on that canonical origin. The URL redirects
@@ -290,14 +311,16 @@ final canonical hostname:
 4. After the first administrator is initialized, remove the bootstrap secret:
 
    ```sh
-   bun run --env-file=.env.cloudflare.local wrangler secret delete EMDASH_BOOTSTRAP_SECRET
+   npx wrangler secret delete EMDASH_BOOTSTRAP_SECRET --name <WORKER_NAME>
    ```
 
    This revokes any remaining bootstrap cookies and prevents another first-admin
-   bootstrap attempt. Run it before deleting or revoking the setup token. If you
-   used Wrangler login or exported credentials instead of the token file, use
-   `bunx wrangler secret delete EMDASH_BOOTSTRAP_SECRET` in that authenticated
-   session. If setup must be recovered before an administrator exists,
+   bootstrap attempt. Always pass the approved `--name`; a bare command targets
+   the placeholder Worker name `minastro-template`. Run it before deleting or
+   revoking the setup credential; with the optional token file, use
+   `bun run --env-file=.env.cloudflare.local wrangler secret delete
+   EMDASH_BOOTSTRAP_SECRET --name <WORKER_NAME>`. If setup must be recovered
+   before an administrator exists,
    or the site is reset and setup is being reopened, configure a newly generated
    Base64URL secret with Wrangler before reopening setup; changing the secret
    invalidates previously issued cookies. Keep the replacement out of shell

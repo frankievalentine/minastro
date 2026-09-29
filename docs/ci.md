@@ -3,7 +3,8 @@
 The repository CI workflow runs on pull requests and pushes to `main`. It uses
 Bun and performs a frozen install, seed validation, generated type/schema drift
 validation, the full test suite, type-checking/linting, a production build, a
-dependency audit, and whitespace/diff hygiene checks.
+dependency audit, the isolated local Worker smoke test, and whitespace/diff
+hygiene checks.
 
 ## Local Worker smoke test
 

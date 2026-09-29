@@ -25,10 +25,15 @@ simulated locally, state persists in `.wrangler/state`, and deleting only that
 directory resets local data. The committed `siteConfig.url` is
 `http://localhost:8787` — the functional local default that exactly matches
 this origin, including for local WebAuthn passkeys. It requires no configured
-remote bindings, no Cloudflare account, and no provisioning; localhost
-passkeys do not transfer to a deployed origin. A site owner must replace
-`siteConfig.url` with their canonical HTTPS URL before any production
-deployment; theme installation attaches no domain.
+remote bindings, no Cloudflare account, and no provisioning; it provides its own
+temporary local bootstrap secret and opens the authorized setup page, so no
+manual local bootstrap step is needed. `.dev.vars` stays optional and is only
+for pinning local secrets or trying local options, but while that file exists
+`cf:dev` stops minting its own secret, so the file must carry a usable 32+ byte
+`EMDASH_BOOTSTRAP_SECRET` or be deleted. Localhost passkeys do not transfer to a
+deployed origin. A site owner must replace `siteConfig.url` with their canonical
+HTTPS URL before any production deployment; theme installation attaches no
+domain.
 
 ## EmDash agent reference
 
@@ -89,49 +94,59 @@ scaffolded site project to Cloudflare.
 
 Confirm the deployment targets the intended Cloudflare account with permission to
 create Workers, D1 databases, R2 buckets, KV namespaces, and Worker secrets.
-Setup authenticates with the account-scoped `CLOUDFLARE_API_TOKEN` from the
-environment and verifies that token against the approved account itself, so a
-separate `bunx wrangler login` is not required for a token-based provisioning
-run. Running `bunx wrangler whoami` is optional; if you use it, load the same
-token from the ignored `.env.cloudflare.local`
+Setup authenticates with the existing `npx wrangler login` OAuth session, and
+offers to run that login when no session exists. An account-scoped
+`CLOUDFLARE_API_TOKEN` is the alternative: setup verifies it against the
+approved account itself. Running `bunx wrangler whoami` is optional; if you use
+it, load the same token from the ignored `.env.cloudflare.local`
 (`bun run --env-file=.env.cloudflare.local wrangler whoami`) and never paste or
 export the value on the command line, so it reports the token's identity instead
 of prompting for an unrelated OAuth login.
 
-Before provisioning, have the user generate both deployment secrets with OpenSSL and
-save the resulting values (not the commands) in their password manager:
+Before provisioning, have the user generate and save both deployment secrets
+(the values, not the commands) in their password manager. The encryption key
+comes from EmDash's own generator rather than OpenSSL:
 
 ```sh
-# EMDASH_ENCRYPTION_KEY: emdash_enc_v1_ plus 43 unpadded base64url chars.
-printf 'emdash_enc_v1_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+# EMDASH_ENCRYPTION_KEY: prints emdash_enc_v1_ plus 43 unpadded base64url chars.
+npx emdash secrets generate
 
 # EMDASH_BOOTSTRAP_SECRET: raw unpadded base64url value, no prefix.
-openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+printf '%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
 ```
 
 `EMDASH_ENCRYPTION_KEY` must match `emdash_enc_v1_` followed by exactly 43
 base64url characters (`A-Z`, `a-z`, `0-9`, `-`, `_`); anything else is rejected
-before upload. Never generate these on the user's behalf, never commit them, and
-never ask the user to paste them into chat or a command line: setup prompts for
-each saved value through hidden input, so the value is never echoed or written
-to disk. An established site's encryption key cannot be recovered if lost, so
-setup refuses to invent a replacement.
+before upload. Never generate either production secret on the user's behalf,
+never commit them, and never ask the user to paste them into chat or a command
+line: setup prompts for each saved value through hidden input, so the value is
+never echoed or written to disk. An established site's encryption key cannot be
+recovered if lost, so setup refuses to invent a replacement. Setup uploads the
+key only after the user approves the plan; to set it on an existing Worker
+instead, use the approved name (`npx wrangler secret put EMDASH_ENCRYPTION_KEY
+--name <worker>`), never a bare command that targets the `minastro-template`
+placeholder.
 
 Before provisioning, ask the user for their final canonical hostname. Confirm
 with them that the hostname lives in an active Cloudflare zone owned by that
 authenticated account, and obtain explicit approval before creating resources,
-attaching the domain, or deploying. After approval, set `src/site.config.ts`
-to `https://<hostname>` and add `{ "pattern": "<hostname>",
-"custom_domain": true }` to a top-level `routes` array in `wrangler.jsonc`.
-Cloudflare handles DNS and TLS for the attached hostname only under those
+attaching the domain, or deploying. A single approval of the printed plan
+covers the account, the derived resource names, the custom domain, the
+deployment, and the cron triggers; there is no separate account, deployment, or
+trigger re-approval. Set `src/site.config.ts` to `https://<hostname>`, or answer
+the `Canonical HTTPS origin:` prompt, which writes the same value. Do not
+hand-edit `wrangler.jsonc`: setup reconciles `account_id`, the Worker name, the
+D1/R2/KV binding IDs, any newsletter bindings, and the custom-domain `routes`
+entry. Cloudflare handles DNS and TLS for the attached hostname only under those
 conditions; registrar transfers and DNS hosted outside Cloudflare cannot be
 automated by this repository, so never assume an arbitrary external hostname
 can be attached.
 
-Prefer the user's ignored local env file over chat for credentials, since
-exported variables remain an accepted alternative: have the user copy the
-tracked `.env.cloudflare.local.example` to `.env.cloudflare.local` at mode
-0600, fill in `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and run
+The Wrangler login is the default credential and needs no file. The ignored
+`.env.cloudflare.local` file is optional, only for token-based runs: have the
+user copy the tracked `.env.cloudflare.local.example` to
+`.env.cloudflare.local` at mode 0600, fill in `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, and run
 `bun run --env-file=.env.cloudflare.local cloudflare:setup`. Never ask the user
 to paste a token into the conversation or into a command line, and never read,
 print, echo, or commit the file's value; the setup script reads the variables
@@ -148,13 +163,16 @@ a versioning prerequisite, not a public site deployment: the real Astro output
 is built and uploaded as a version afterward, then deployed at 100% traffic,
 and only the later `wrangler triggers deploy` phase attaches the custom domain.
 The command creates the Worker, D1 database, R2 bucket, and session KV
-namespace; for a fresh site it prompts for the saved `EMDASH_ENCRYPTION_KEY` and,
-when a first-admin bootstrap is prepared, the saved `EMDASH_BOOTSTRAP_SECRET`
-through hidden input, then uploads them. It then writes the Worker
-name and binding IDs to `wrangler.jsonc` and deploys the route/site URL
-configured above. Do not deploy while the placeholder IDs remain, and do not
-manually replace only some placeholders: the setup script rejects partially
-configured core bindings to prevent duplicate resources.
+namespace, names from the approved Worker name (`<worker>`, `<worker>-db`,
+`<worker>-media`, `<worker>-sessions`), and takes one plan approval before
+creating anything. For a fresh site it then prompts for the saved
+`EMDASH_ENCRYPTION_KEY` and the saved `EMDASH_BOOTSTRAP_SECRET` through hidden
+input and uploads them, writing the Worker name, `account_id`, binding IDs, the
+custom-domain route, and the site URL into `wrangler.jsonc`/`src/site.config.ts`.
+Newsletter resources are added only when the operator passes `--newsletter`;
+never enable them implicitly. Do not deploy while the placeholder IDs remain,
+and do not manually replace only some placeholders: the setup script rejects
+partially configured core bindings to prevent duplicate resources.
 
 Wrangler 4.120 does not accept a `--json` flag on `wrangler d1 create`.
 Do not add that flag to D1 provisioning commands; use the currently supported
@@ -162,9 +180,10 @@ machine-readable output or a documented API response instead.
 
 Worker secrets are stored in Cloudflare and never committed.
 `.env.cloudflare.local` is a different thing: an ignored, operator-owned
-plaintext file holding the account-scoped setup token for the interactive
-provisioning run only, which must never be committed or reused as a Worker
-binding. `EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET` are operator-
+plaintext file that optionally holds the account-scoped setup token for a
+token-based interactive provisioning run, which must never be committed or
+reused as a Worker binding; the Wrangler login is the default and needs no file.
+`EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET` are operator-
 supplied from the password manager (§ provisioning) and never live in the repo.
 `.dev.vars` is ignored and is only for local development; it cannot
 create Cloudflare bindings either. The newsletter setup is optional and needs
