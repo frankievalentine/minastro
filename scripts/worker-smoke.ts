@@ -401,6 +401,11 @@ async function main(): Promise<void> {
 
     if (interruptedSignal) throw new Error(`Smoke run interrupted by ${interruptedSignal}.`);
 
+    requireCondition(
+      !output.recent.includes(bootstrapSecret),
+      "The local Worker startup output exposed the bootstrap secret.",
+    );
+
     ui.section("Runtime checks");
     const root = await request(origin, "/");
     assertEmptyD1Endpoint("/", root);

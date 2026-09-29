@@ -19,10 +19,12 @@ import {
   type ProvisioningFileSystem,
   type ProvisioningJournal,
 } from "./setup-cloudflare-lib";
-import { promptSecretDetached, runProvisioning, type SetupRuntime } from "./setup-cloudflare";
+import { parseCliArguments, promptSecretDetached, runProvisioning, withDetachedReadline, type ReadlineHandle, type SetupRuntime } from "./setup-cloudflare";
+import { acquireWranglerCredential, parseWranglerAccounts, parseWranglerCredential, selectWranglerAccount } from "./setup-auth";
 import { createTerminalUI, type TerminalUI } from "./terminal-ui";
 
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
+const OTHER_ACCOUNT = "fedcba9876543210fedcba9876543210";
 const ROOT = "/fake-project";
 const WORKER = "example";
 const WORKER_ID = "aaaaaaaa111122223333444455555666";
@@ -94,6 +96,10 @@ class MemoryFileSystem implements ProvisioningFileSystem {
 interface FakeOptions {
   config?: string;
   site?: string;
+  approvedAccountId?: string;
+  oauthSession?: string;
+  authTokenOutput?: string | null;
+  whoamiAccounts?: Array<{ id: string; name: string }> | null;
   coreConfigured?: boolean;
   newsletterConfigured?: boolean;
   resendConfigured?: boolean;
@@ -116,10 +122,15 @@ interface FakeOptions {
 class FakeRuntime implements SetupRuntime {
   progress?: TerminalUI;
   readonly fs = new MemoryFileSystem();
-  readonly apiToken = "test-token";
-  readonly approvedAccountId = ACCOUNT;
+  apiToken: string | undefined = "test-token";
+  authSource?: "environment" | "wrangler";
+  readonly approvedAccountId: string;
+  authTokenOutput: string | null | undefined;
+  whoamiAccounts: Array<{ id: string; name: string }> | null | undefined;
   readonly commands: string[][] = [];
   readonly interactiveCommands: string[][] = [];
+  readonly runEnvironments: Array<Record<string, string | undefined> | undefined> = [];
+  readonly interactiveEnvironments: Array<Record<string, string | undefined> | undefined> = [];
   readonly apiUrls: string[] = [];
   readonly writeRequests: Array<{ url: string; method: string }> = [];
   readonly events: string[] = [];
@@ -160,6 +171,10 @@ class FakeRuntime implements SetupRuntime {
   private secretAnswers: string[];
 
   constructor(options: FakeOptions = {}) {
+    this.approvedAccountId = options.approvedAccountId ?? ACCOUNT;
+    this.authTokenOutput = options.oauthSession ? JSON.stringify({ type: "oauth", token: options.oauthSession }) : options.authTokenOutput;
+    this.whoamiAccounts = options.whoamiAccounts;
+    if (options.oauthSession || options.authTokenOutput === null) this.apiToken = undefined;
     this.failD1Create = options.failD1Create ?? false;
     this.failVersionUpload = options.failVersionUpload ?? 0;
     this.failDeployment = options.failDeployment ?? 0;
@@ -263,7 +278,8 @@ class FakeRuntime implements SetupRuntime {
     return this;
   }
 
-  async prompt() {
+  async prompt(question: string) {
+    this.prompts.push(question);
     return this.answers.shift() ?? "y";
   }
 
@@ -301,7 +317,8 @@ class FakeRuntime implements SetupRuntime {
       const service = this.canonicalAttachment === "wrong" ? "another-worker" : WORKER;
       return Response.json({ success: true, result: this.canonicalAttachment === "missing" ? [] : [{ hostname: "example.test", service, status: "active" }] });
     }
-    return Response.json({ success: true, result: { id: ACCOUNT } });
+    const accountMatch = url.match(/\/accounts\/([a-f0-9]{32})(?:\?|$)/);
+    return Response.json({ success: true, result: { id: accountMatch?.[1] ?? ACCOUNT } });
   }
 
   async originFetch(url: string) {
@@ -322,8 +339,17 @@ class FakeRuntime implements SetupRuntime {
     return new Response(null, { status: 302, headers: { Location: location } });
   }
 
-  async run(command: string[], _options: { input?: string } = {}) {
+  async run(command: string[], _options: { input?: string; env?: Record<string, string | undefined> } = {}) {
     this.commands.push(command);
+    this.runEnvironments.push(_options.env);
+    if (command[1] === "wrangler" && command[2] === "auth" && command[3] === "token") {
+      if (this.authTokenOutput === null || this.authTokenOutput === undefined) throw new Error("bunx wrangler auth token --json failed.");
+      return this.authTokenOutput;
+    }
+    if (command[1] === "wrangler" && command[2] === "whoami") {
+      if (this.whoamiAccounts === null || this.whoamiAccounts === undefined) throw new Error("bunx wrangler whoami --json failed.");
+      return JSON.stringify({ loggedIn: true, accounts: this.whoamiAccounts });
+    }
     if (command.includes("d1") && command.includes("list") && !command.includes("migrations")) return JSON.stringify(this.resources.d1);
     if (command.includes("d1") && command.includes("execute")) {
       const sql = command[command.indexOf("--command") + 1] ?? "";
@@ -406,8 +432,13 @@ class FakeRuntime implements SetupRuntime {
     return "";
   }
 
-  async runInteractive(command: string[]) {
+  async runInteractive(command: string[], _options: { env?: Record<string, string | undefined> } = {}) {
     this.interactiveCommands.push(command);
+    this.interactiveEnvironments.push(_options.env);
+    if (command[1] === "wrangler" && command[2] === "login") {
+      this.authTokenOutput = JSON.stringify({ type: "oauth", token: "oauth-login-token" });
+      return;
+    }
     if (isBootstrapDeploy(command)) {
       if (this.failBootstrapDeploy > 0) {
         this.failBootstrapDeploy -= 1;
@@ -486,7 +517,7 @@ const OPERATOR_BOOTSTRAP_SECRET = base64Url32(131);
 
 function fullFreshRuntime(options: FakeOptions = {}) {
   return new FakeRuntime(options)
-    .answer("y", WORKER, "", "", "https://example.test", "y", "n", "y", "y", "y")
+    .answer(WORKER, "https://example.test", "y")
     .secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
 }
 
@@ -506,6 +537,14 @@ describe("full resumable provisioning sequences", () => {
     expect(transcript).toContain("Final verification\n");
     expect(runtime.interactiveCommands.some((command) => command.join(" ") === "bun run build")).toBe(true);
     expect(transcript).not.toContain("\x1b[");
+    expect(runtime.prompts).toEqual([
+      "Worker name [my-site]: ",
+      "Canonical HTTPS origin: ",
+      "Approve this complete Cloudflare provisioning plan (account, resources, custom domain, deployment, and cron triggers)? [y/N] ",
+    ]);
+    expect(runtime.runEnvironments.every((env) => env?.WRANGLER_WRITE_LOGS === "false")).toBe(true);
+    const buildEnvironment = runtime.interactiveEnvironments[runtime.interactiveCommands.findIndex((command) => command.join(" ") === "bun run build")];
+    expect(buildEnvironment?.CLOUDFLARE_API_TOKEN).toBe("test-token");
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
     expect(runtime.commands.some((command) => command.includes("r2") && command.includes("list"))).toBe(false);
     expect(runtime.commands.some((command) => command.includes("kv") && command.includes("list"))).toBe(false);
@@ -545,7 +584,7 @@ describe("full resumable provisioning sequences", () => {
     const runtime = fullFreshRuntime({ failVersionUpload: 1 });
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "Prepared version upload");
     const uploadsBeforeResume = runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length;
-    runtime.replaceAnswers("y", "y", "y", "y", "y");
+    runtime.replaceAnswers("y");
     runtime.replaceSecretAnswers(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(uploadsBeforeResume);
@@ -597,7 +636,7 @@ describe("full resumable provisioning sequences", () => {
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(0);
     const d1Creates = runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length;
-    runtime.replaceAnswers("y", "y");
+    runtime.replaceAnswers("y");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "previous Worker create outcome");
     expect(runtime.writeRequests.length).toBe(1);
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1Creates);
@@ -654,7 +693,7 @@ describe("full resumable provisioning sequences", () => {
     expect(pending.milestones.workerBootstrapDeployed).not.toBe(true);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
-    runtime.replaceAnswers("y", "y", "y", "y", "y", "y");
+    runtime.replaceAnswers("y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(1);
     expect(runtime.commands.filter((command) => command.includes("r2") && command.includes("create")).length).toBe(1);
@@ -686,7 +725,7 @@ describe("full resumable provisioning sequences", () => {
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("upload")).length).toBe(0);
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
     runtime.bootstrapDeployNeverLands = false;
-    runtime.replaceAnswers("y", "y", "y", "y", "y", "y");
+    runtime.replaceAnswers("y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys + 1);
     const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
@@ -702,8 +741,7 @@ describe("full resumable provisioning sequences", () => {
     delete journal.milestones.workerBootstrapDeployed;
     runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
     const bootstrapDeploys = runtime.interactiveCommands.filter(isBootstrapDeploy).length;
-    runtime.replaceAnswers("y", "y", "y", "y", "y");
-    runtime.replaceSecretAnswers(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
+    runtime.replaceAnswers("y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.filter(isBootstrapDeploy).length).toBe(bootstrapDeploys);
     const complete = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
@@ -726,7 +764,7 @@ describe("full resumable provisioning sequences", () => {
     runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
     runtime.commands.length = 0;
     runtime.interactiveCommands.length = 0;
-    runtime.replaceAnswers("y", "y", "y", "y", "y");
+    runtime.replaceAnswers("y");
     runtime.replaceSecretAnswers(OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.interactiveCommands.some((command) => command.includes("versions") && command.includes("upload"))).toBe(false);
@@ -763,32 +801,33 @@ describe("full resumable provisioning sequences", () => {
   });
 
   test("reloads a partial journal without retrying an ambiguous D1 create", async () => {
-    const runtime = new FakeRuntime({ failD1Create: true }).answer("y", WORKER, "", "", "https://example.test", "y", "n", "y");
+    const runtime = new FakeRuntime({ failD1Create: true }).answer(WORKER, "https://example.test", "y");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "ambiguous");
     const d1CreateAttempts = runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length;
     runtime.failD1Create = false;
-    runtime.answer("y", WORKER, "y");
+    runtime.answer(WORKER, "y");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "previous D1 database create outcome");
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1CreateAttempts);
     runtime.resources.d1.push({ uuid: "example-db-id", name: "example-db" });
-    runtime.answer("y", WORKER, "y", "y", "y", "y").secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
+    runtime.answer(WORKER, "y").secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1CreateAttempts);
   });
 
   test("requires explicit adoption for same-name resources and rejects target mismatch", async () => {
-    const runtime = new FakeRuntime({ coreConfigured: true }).answer("y", "n", "n", "y", "y", "y", "y", "y");
+    const runtime = new FakeRuntime({ coreConfigured: true }).answer("y", "y", "y", "y", "y").secretAnswer(OPERATOR_BOOTSTRAP_SECRET);
     await runProvisioning({ runtime, projectRoot: ROOT });
-    expect(runtime.prompts.length).toBe(0);
+    expect(runtime.prompts[0]).toContain("Approve this complete Cloudflare provisioning plan");
+    expect(runtime.prompts.every((question) => /Approve this complete Cloudflare provisioning plan|already exists remotely/.test(question))).toBe(true);
     const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
     const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
-    journal.target.accountId = "fedcba9876543210fedcba9876543210";
+    journal.target.accountId = OTHER_ACCOUNT;
     runtime.fs.files.set(journalPath, serializeProvisioningJournal(journal));
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "journal target");
   });
 
   test("does not regenerate a missing encryption key on an established database", async () => {
-    const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "n", "y", "y", "y", "y");
+    const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "y", "y", "y", "y");
     runtime.removeSecret("EMDASH_ENCRYPTION_KEY");
     await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "EMDASH_ENCRYPTION_KEY is absent");
     expect(runtime.commands.some((command) => command.includes("versions") && command.includes("secret") && command.includes("put"))).toBe(false);
@@ -797,10 +836,10 @@ describe("full resumable provisioning sequences", () => {
 
   test("handles partial newsletter and Resend prerequisites with migration response loss", async () => {
     const runtime = new FakeRuntime().answer(
-      "y", WORKER, "", "", "https://example.test", "n", "y", "newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "y", "y", "y",
-    ).secretAnswer(OPERATOR_ENCRYPTION_KEY, "turnstile-secret", "admin-secret", "resend-secret");
+      WORKER, "https://example.test", "newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "y",
+    ).secretAnswer(OPERATOR_ENCRYPTION_KEY, OPERATOR_BOOTSTRAP_SECRET, "turnstile-secret", "admin-secret", "resend-secret");
     runtime.migrationApplyResponseLoss = true;
-    await runProvisioning({ runtime, projectRoot: ROOT });
+    await runProvisioning({ runtime, projectRoot: ROOT, newsletter: true });
     expect(runtime.migrations.has("0003_resend_quarantine.sql")).toBe(true);
     expect(runtime.secrets.has("TURNSTILE_SECRET_KEY")).toBe(true);
     expect(runtime.secrets.has("NEWSLETTER_ADMIN_TOKEN")).toBe(true);
@@ -808,10 +847,10 @@ describe("full resumable provisioning sequences", () => {
     const writtenConfig = parseJsonc<{ ratelimits: Array<{ name: string; namespace_id: string }> }>(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc")), "reconciled Wrangler config");
     expect(writtenConfig.ratelimits.find((binding) => binding.name === "NEWSLETTER_SUBSCRIBE_LIMITER")?.namespace_id).toBe("9");
     const secretUploads = runtime.commands.filter((command) => command.includes("versions") && command.includes("secret") && command.includes("put"));
-    expect(secretUploads).toHaveLength(4);
+    expect(secretUploads).toHaveLength(5);
     const tags = secretUploads.map((command) => command[command.indexOf("--tag") + 1] ?? "");
     expect(tags.every((tag) => tag.length > 0 && tag.length <= 100)).toBe(true);
-    expect(new Set(tags).size).toBe(4);
+    expect(new Set(tags).size).toBe(5);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(1);
   });
 
@@ -883,14 +922,229 @@ describe("full resumable provisioning sequences", () => {
   });
 
   test("keeps a completed site's revoked bootstrap secret revoked on a no-op rerun", async () => {
-    const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "n", "y", "y", "y", "y", "y");
+    const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "y", "y", "y", "y");
     runtime.removeSecret("EMDASH_BOOTSTRAP_SECRET");
     await runProvisioning({ runtime, projectRoot: ROOT });
     const deploymentsBeforeRerun = runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length;
-    runtime.answer("y", "y");
+    runtime.answer("y");
     await runProvisioning({ runtime, projectRoot: ROOT });
     expect(runtime.secrets.has("EMDASH_BOOTSTRAP_SECRET")).toBe(false);
     expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(deploymentsBeforeRerun);
+  });
+});
+
+describe("setup authentication and CLI surface", () => {
+  test("parses wrangler credentials without echoing raw values", () => {
+    expect(parseWranglerCredential('{"type":"oauth","token":"oauth-token"}')).toEqual({ mode: "oauth", token: "oauth-token" });
+    expect(parseWranglerCredential('{"type":"api_token","token":"api-token"}')).toEqual({ mode: "api_token", token: "api-token" });
+    expect(() => parseWranglerCredential('{"type":"api_key","key":"key","email":"a@example.test"}')).toThrow("legacy API key");
+    const messages: string[] = [];
+    for (const output of ["wrangler said oauth-token-value", '{"type":"mystery","token":"oauth-token-value"}']) {
+      try {
+        parseWranglerCredential(output);
+      } catch (error) {
+        messages.push((error as Error).message);
+      }
+    }
+    expect(messages).toHaveLength(2);
+    expect(messages.join(" ")).not.toContain("oauth-token-value");
+  });
+
+  test("selects a Cloudflare account from wrangler whoami output", () => {
+    const accounts = parseWranglerAccounts(JSON.stringify({ loggedIn: true, accounts: [{ id: ACCOUNT, name: "Example" }, { id: OTHER_ACCOUNT, name: "Other" }] }));
+    expect(accounts).toEqual([{ id: ACCOUNT, name: "Example" }, { id: OTHER_ACCOUNT, name: "Other" }]);
+    expect(selectWranglerAccount("2", accounts)).toBe(OTHER_ACCOUNT);
+    expect(selectWranglerAccount(ACCOUNT.toUpperCase(), accounts)).toBe(ACCOUNT);
+    expect(() => selectWranglerAccount("3", accounts)).toThrow("Select a listed Cloudflare account");
+    expect(() => parseWranglerAccounts(JSON.stringify({ loggedIn: true, accounts: [{ id: "nope" }] }))).toThrow("no usable Cloudflare account");
+  });
+
+  test("prefers the environment token over wrangler probes", async () => {
+    const runtime = new FakeRuntime({ authTokenOutput: null });
+    const credential = await acquireWranglerCredential(runtime, { CLOUDFLARE_API_TOKEN: "env-token" }, { interactive: false });
+    expect(credential).toEqual({ mode: "api_token", token: "env-token" });
+    expect(runtime.commands).toEqual([]);
+  });
+
+  test("uses an existing wrangler login session with Wrangler disk logging disabled", async () => {
+    const runtime = new FakeRuntime({ oauthSession: "oauth-token" });
+    const credential = await acquireWranglerCredential(runtime, {}, { interactive: false });
+    expect(credential).toEqual({ mode: "oauth", token: "oauth-token" });
+    expect(runtime.commands[0]).toEqual(["bunx", "wrangler", "auth", "token", "--json"]);
+    expect(runtime.runEnvironments[0]?.WRANGLER_WRITE_LOGS).toBe("false");
+    expect(runtime.runEnvironments[0]?.CLOUDFLARE_API_TOKEN).toBeUndefined();
+    expect(runtime.prompts).toEqual([]);
+    expect(runtime.apiToken).toBeUndefined();
+  });
+
+  test("offers a browser login when no credential exists", async () => {
+    const runtime = new FakeRuntime({ authTokenOutput: null }).answer("y");
+    const credential = await acquireWranglerCredential(runtime, {}, { interactive: true });
+    expect(credential).toEqual({ mode: "oauth", token: "oauth-login-token" });
+    expect(runtime.interactiveCommands).toEqual([["bunx", "wrangler", "login"]]);
+  });
+
+  test("refuses to provision without credentials in a non-interactive terminal", async () => {
+    const runtime = new FakeRuntime({ authTokenOutput: null });
+    await expectFailure(() => acquireWranglerCredential(runtime, {}, { interactive: false }), "cannot authenticate interactively");
+    expect(runtime.interactiveCommands).toEqual([]);
+  });
+
+  test("provisions over an OAuth session without handing the token to Wrangler", async () => {
+    const runtime = fullFreshRuntime({ oauthSession: "oauth-token" });
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.commands[0]).toEqual(["bunx", "wrangler", "auth", "token", "--json"]);
+    expect(runtime.apiToken).toBe("oauth-token");
+    expect(runtime.runEnvironments.every((env) => env?.CLOUDFLARE_API_TOKEN === undefined)).toBe(true);
+    expect(runtime.runEnvironments.every((env) => env?.WRANGLER_WRITE_LOGS === "false")).toBe(true);
+    const buildEnvironment = runtime.interactiveEnvironments[runtime.interactiveCommands.findIndex((command) => command.join(" ") === "bun run build")];
+    expect(buildEnvironment?.CLOUDFLARE_API_TOKEN).toBeUndefined();
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    expect(parseProvisioningJournal(requiredFile(runtime.fs, journalPath)).milestones.triggersDeployed).toBe(true);
+  });
+
+  test("resolves the account from wrangler whoami when none is configured", async () => {
+    const runtime = fullFreshRuntime({ approvedAccountId: "", whoamiAccounts: [{ id: ACCOUNT, name: "Example" }, { id: OTHER_ACCOUNT, name: "Other" }] });
+    runtime.replaceAnswers("2", WORKER, "https://example.test", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.prompts[0]).toContain("Select a Cloudflare account by number");
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), OTHER_ACCOUNT, WORKER)));
+    expect(journal.target.accountId).toBe(OTHER_ACCOUNT);
+  });
+
+  test("uses the only authenticated account without an account prompt", async () => {
+    const runtime = fullFreshRuntime({ approvedAccountId: "", whoamiAccounts: [{ id: OTHER_ACCOUNT, name: "Solo" }] });
+    runtime.replaceAnswers(WORKER, "https://example.test", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.prompts.some((question) => question.includes("Select a Cloudflare account"))).toBe(false);
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), OTHER_ACCOUNT, WORKER)));
+    expect(journal.target.accountId).toBe(OTHER_ACCOUNT);
+  });
+
+  test("uses --name and --account without prompting for either", async () => {
+    const runtime = fullFreshRuntime();
+    runtime.replaceAnswers("https://example.test", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT, workerName: WORKER, accountId: ACCOUNT });
+    expect(runtime.prompts).toEqual([
+      "Canonical HTTPS origin: ",
+      "Approve this complete Cloudflare provisioning plan (account, resources, custom domain, deployment, and cron triggers)? [y/N] ",
+    ]);
+  });
+
+  test("parses the supported CLI arguments and rejects unknown ones", () => {
+    expect(parseCliArguments([])).toEqual({});
+    expect(parseCliArguments(["--name", WORKER, "--account", ACCOUNT, "--newsletter"])).toEqual({ workerName: WORKER, accountId: ACCOUNT, newsletter: true });
+    expect(parseCliArguments([`--name=${WORKER}`, "--newsletter"])).toEqual({ workerName: WORKER, newsletter: true });
+    expect(() => parseCliArguments(["--newletter"])).toThrow("Unknown setup argument");
+    expect(() => parseCliArguments(["--name"])).toThrow("requires a value");
+  });
+
+  test("leaves the newsletter off unless --newsletter is passed", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.resources.d1.some((entry) => entry.name === "example-newsletter")).toBe(false);
+    expect(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc"))).not.toContain("NEWSLETTER_DB");
+    expect(runtime.prompts.every((question) => !/newsletter/i.test(question))).toBe(true);
+  });
+
+  test("fails fast when the site enables the newsletter without a binding or opt-in", async () => {
+    const runtime = new FakeRuntime({ site: actualSiteConfig.replace("enabled: false", "enabled: true") }).answer(WORKER, "https://example.test");
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "pass --newsletter");
+  });
+
+  test("inherits an operator's pre-set encryption key from the deployed Worker", async () => {
+    const runtime = new FakeRuntime({ coreConfigured: true, databaseEstablished: true }).answer("y", "y", "y", "y", "y");
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    expect(runtime.secretPrompts).toEqual([]);
+    expect(runtime.commands.some((command) => command.includes("versions") && command.includes("secret") && command.includes("put"))).toBe(false);
+  });
+
+  test("grants the newsletter add-on when the expanded plan is approved", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    expect(parseProvisioningJournal(requiredFile(runtime.fs, journalPath)).plan).toMatchObject({ newsletter: { enabled: false } });
+    const coreD1Creates = runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length;
+    const coreDeployments = runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length;
+    const triggerDeployments = () => runtime.interactiveCommands.filter((command) => command.includes("triggers") && command.includes("deploy")).length;
+    const coreTriggerDeployments = triggerDeployments();
+
+    runtime.replaceAnswers("newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "y");
+    runtime.replaceSecretAnswers("turnstile-secret", "admin-secret", "resend-secret", OPERATOR_BOOTSTRAP_SECRET);
+    await runProvisioning({ runtime, projectRoot: ROOT, newsletter: true });
+
+    const journal = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(journal.plan).toMatchObject({ newsletter: { enabled: true, newFeature: true, databaseName: "example-newsletter" } });
+    expect(runtime.secrets.has("EMDASH_ENCRYPTION_KEY")).toBe(true);
+    expect(runtime.secrets.has("TURNSTILE_SECRET_KEY")).toBe(true);
+    expect(runtime.secrets.has("NEWSLETTER_ADMIN_TOKEN")).toBe(true);
+    expect(runtime.secrets.has("RESEND_API_KEY")).toBe(true);
+    expect(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc"))).toContain("NEWSLETTER_DB");
+    expect(requiredFile(runtime.fs, join(ROOT, "src/site.config.ts"))).toContain("expectedHostname: \"example.test\"");
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(coreD1Creates + 1);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(coreDeployments + 1);
+    expect(triggerDeployments()).toBe(coreTriggerDeployments + 1);
+  });
+
+  test("makes no add-on changes when the expanded plan is denied", async () => {
+    const runtime = fullFreshRuntime();
+    await runProvisioning({ runtime, projectRoot: ROOT });
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const journalBefore = requiredFile(runtime.fs, journalPath);
+    const d1Creates = runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length;
+    const secretPuts = runtime.commands.filter((command) => command.includes("versions") && command.includes("secret") && command.includes("put")).length;
+    const versionDeployments = runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length;
+    const triggerDeployments = runtime.interactiveCommands.filter((command) => command.includes("triggers") && command.includes("deploy")).length;
+
+    const promptsBefore = runtime.prompts.length;
+    runtime.replaceAnswers("newsletter@example.test", "site-key", "example.test", "9", "y", "segment-id", "n");
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT, newsletter: true }), "plan rejected");
+    expect(runtime.prompts.slice(promptsBefore)).toHaveLength(7);
+
+    expect(runtime.resources.d1.some((entry) => entry.name === "example-newsletter")).toBe(false);
+    expect(runtime.secrets.has("TURNSTILE_SECRET_KEY")).toBe(false);
+    expect(runtime.secrets.has("NEWSLETTER_ADMIN_TOKEN")).toBe(false);
+    expect(runtime.secrets.has("RESEND_API_KEY")).toBe(false);
+    expect(runtime.commands.filter((command) => command.includes("d1") && command.includes("create")).length).toBe(d1Creates);
+    expect(runtime.commands.filter((command) => command.includes("versions") && command.includes("secret") && command.includes("put")).length).toBe(secretPuts);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("versions") && command.includes("deploy")).length).toBe(versionDeployments);
+    expect(runtime.interactiveCommands.filter((command) => command.includes("triggers") && command.includes("deploy")).length).toBe(triggerDeployments);
+    expect(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc"))).not.toContain("NEWSLETTER_DB");
+    expect(requiredFile(runtime.fs, join(ROOT, "src/site.config.ts"))).not.toContain("enabled: true");
+    expect(requiredFile(runtime.fs, journalPath)).toBe(journalBefore);
+  });
+
+  test("refuses --newsletter while the existing plan still has pending work", async () => {
+    const runtime = fullFreshRuntime({ failTriggers: 1 });
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "Trigger deployment failed");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    expect(parseProvisioningJournal(requiredFile(runtime.fs, journalPath)).pending.triggers).toBe(true);
+    runtime.replaceAnswers();
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT, newsletter: true }), "still has pending provisioning work");
+  });
+
+  test("refuses --newsletter after an interrupted resource create and keeps the journal intact", async () => {
+    const runtime = new FakeRuntime({ failD1Create: true }).answer(WORKER, "https://example.test", "y");
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT }), "ambiguous");
+    const journalPath = provisioningJournalPath(join(ROOT, ".wrangler/provisioning"), ACCOUNT, WORKER);
+    const interrupted = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(interrupted.pending.deployment).toBe(false);
+    expect(interrupted.pending.triggers).toBe(false);
+    expect(interrupted.milestones.deployed).not.toBe(true);
+    expect(interrupted.milestones.triggersDeployed).not.toBe(true);
+    expect(interrupted.milestones.canonicalVerified).not.toBe(true);
+
+    const promptsBefore = runtime.prompts.length;
+    runtime.replaceAnswers(WORKER);
+    await expectFailure(() => runProvisioning({ runtime, projectRoot: ROOT, newsletter: true }), "base site deployment is not complete");
+    expect(runtime.prompts.slice(promptsBefore)).toEqual(["Worker name [my-site]: "]);
+    expect(runtime.secretPrompts).toEqual([]);
+    expect(requiredFile(runtime.fs, join(ROOT, "wrangler.jsonc"))).not.toContain("NEWSLETTER_DB");
+    expect(requiredFile(runtime.fs, join(ROOT, "src/site.config.ts"))).not.toContain("enabled: true");
+    const preserved = parseProvisioningJournal(requiredFile(runtime.fs, journalPath));
+    expect(preserved.plan).toMatchObject({ newsletter: { enabled: false } });
+    expect(preserved.resources.coreD1.createAttempted).toBe(true);
+    expect(preserved.milestones.canonicalVerified).not.toBe(true);
   });
 });
 
@@ -917,6 +1171,41 @@ describe("provisioning safety primitives", () => {
     const normalLine = new Promise<string>((resolve) => activeReadline.once("line", resolve));
     terminal.write("ordinary input\n");
     expect(await normalLine).toBe("ordinary input");
+    activeReadline.close();
+    terminal.destroy();
+    outputStream.destroy();
+  });
+
+  test("hands inherited stdin to an interactive child and restores prompting after a failed child", async () => {
+    const terminal = new PassThrough() as PassThrough & { isTTY?: boolean };
+    terminal.isTTY = true;
+    const outputStream = new Writable({ write: (_chunk, _encoding, callback) => callback() });
+    let activeReadline = createLineInterface({ input: terminal, output: outputStream });
+    let parentLines = 0;
+    activeReadline.on("line", () => { parentLines += 1; });
+    const session = {
+      get: () => activeReadline,
+      replace: (next: ReadlineHandle) => { activeReadline = next as typeof activeReadline; },
+    };
+    const recreate = () => createLineInterface({ input: terminal, output: outputStream });
+
+    let pausedDuringChild = false;
+    const childInput = await withDetachedReadline(session, recreate, async () => {
+      pausedDuringChild = terminal.isPaused();
+      terminal.write("y\n");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return terminal.read() as string | null;
+    }, terminal);
+    expect({ parentLines, raw: String(childInput), paused: pausedDuringChild }).toEqual({ parentLines: 0, raw: "y\n", paused: true });
+
+    await expectFailure(
+      () => withDetachedReadline(session, recreate, async () => { throw new Error("child spawn failed"); }, terminal),
+      "child spawn failed",
+    );
+    const followUp = new Promise<string>((resolve) => activeReadline.once("line", resolve));
+    terminal.write("n\n");
+    expect((await followUp).trim()).toBe("n");
+
     activeReadline.close();
     terminal.destroy();
     outputStream.destroy();

@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createTerminalUI, type TerminalUI } from "./terminal-ui";
+import { acquireWranglerCredential, chooseWranglerAccount } from "./setup-auth";
 
 import {
   JOURNAL_DIRECTORY,
@@ -52,6 +53,8 @@ export interface ReadlineHandle {
 export interface SetupRuntime {
   fs: ProvisioningFileSystem;
   apiToken?: string;
+  /** "wrangler" keeps an OAuth token out of child processes; Wrangler refreshes its own session. */
+  authSource?: "environment" | "wrangler";
   approvedAccountId?: string;
   apiFetch: AccountFetch;
   originFetch: AccountFetch;
@@ -254,6 +257,22 @@ export async function promptSecretDetached(
   }
 }
 
+/** Required ordering: a readline still attached to inherited stdin swallows the child's input. */
+export async function withDetachedReadline<T>(
+  session: { get: () => ReadlineHandle; replace: (next: ReadlineHandle) => void },
+  recreate: () => ReadlineHandle,
+  action: () => Promise<T>,
+  terminal: { pause: () => void } = input,
+): Promise<T> {
+  session.get().close();
+  terminal.pause();
+  try {
+    return await action();
+  } finally {
+    session.replace(recreate());
+  }
+}
+
 function defaultRuntime(readline: ReturnType<typeof createInterface>): SetupRuntime {
   let activeReadline = readline;
   const recreateReadline = () => createInterface({ input, output });
@@ -296,8 +315,17 @@ function defaultRuntime(readline: ReturnType<typeof createInterface>): SetupRunt
         if (value === undefined) delete environment[key];
         else environment[key] = value;
       }
-      const child = Bun.spawn({ cmd: command, cwd: PROJECT_ROOT, env: environment, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-      if ((await child.exited) !== 0) throw new Error(`${command.join(" ")} failed.`);
+      await withDetachedReadline(
+        {
+          get: () => activeReadline,
+          replace: (next) => { activeReadline = next as ReturnType<typeof createInterface>; },
+        },
+        recreateReadline,
+        async () => {
+          const child = Bun.spawn({ cmd: command, cwd: PROJECT_ROOT, env: environment, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+          if ((await child.exited) !== 0) throw new Error(`${command.join(" ")} failed.`);
+        },
+      );
     },
     prompt: (question) => activeReadline.question(question),
     promptSecret: (question) => promptSecretDetached(question, {
@@ -351,7 +379,7 @@ function accountId(value: string): string {
 }
 
 async function verifyAccount(runtime: SetupRuntime, id: string) {
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required and must be supplied through the environment; setup never stores it.");
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required before setup can verify the account; setup never stores credentials.");
   let body: unknown;
   try {
     const response = await runtime.apiFetch(`${CLOUDFLARE_API}/accounts/${id}`, { headers: { Authorization: `Bearer ${runtime.apiToken}` } });
@@ -370,8 +398,15 @@ function wranglerCommand(root: string, args: string[], configPath?: string) {
 }
 
 function wranglerOptions(runtime: SetupRuntime, account: string, options: CommandOptions = {}): CommandOptions {
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for Wrangler operations.");
-  return { ...options, env: { ...options.env, CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } };
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required for Wrangler operations.");
+  return { ...options, env: { ...options.env, ...credentialEnvironment(runtime, account) } };
+}
+
+/** Security-relevant: WRANGLER_WRITE_LOGS=false keeps secrets out of Wrangler's disk log, and an OAuth token never enters a child process. */
+function credentialEnvironment(runtime: SetupRuntime, account: string): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { CLOUDFLARE_ACCOUNT_ID: account, WRANGLER_WRITE_LOGS: "false" };
+  if (runtime.authSource !== "wrangler" && runtime.apiToken) env.CLOUDFLARE_API_TOKEN = runtime.apiToken;
+  return env;
 }
 
 function withProgress<T>(runtime: SetupRuntime, label: string, operation: () => Promise<T>): Promise<T> {
@@ -447,6 +482,13 @@ function textConfigValue(source: string, property: string): string | null {
   return source.match(new RegExp(`\\b${property}:\\s*"([^"]*)"`))?.[1] ?? null;
 }
 
+function newsletterEnabledInSource(source: string): boolean {
+  const start = source.lastIndexOf("newsletter: {");
+  if (start === -1) return false;
+  const end = source.indexOf("\n  },", start);
+  return /\benabled:\s*true\b/.test(end === -1 ? source.slice(start) : source.slice(start, end));
+}
+
 function hostname(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!/^(localhost|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})$/.test(normalized)) throw new Error("Enter a hostname only, without a protocol, path, or port.");
@@ -484,8 +526,9 @@ function databaseStateLabel(state: DatabaseState): Plan["cmsState"] {
   return "incomplete";
 }
 
-function planSummary(plan: Plan) {
+function planSummary(plan: Plan, accountId: string) {
   const lines = [
+    `  Cloudflare account: ${accountId}`,
     `  Worker: ${plan.workerName} (${plan.newCore ? "new" : "configured"})`,
     `  Custom domain: ${plan.canonicalOrigin}`,
     `  CMS D1 database: ${plan.d1Name}`,
@@ -506,47 +549,27 @@ function planSummary(plan: Plan) {
   return lines.join("\n");
 }
 
-async function promptPlan(runtime: SetupRuntime, config: Record<string, unknown>, siteSource: string, existing: ProvisioningJournal | undefined, workerOverride: string, coreState: CoreState, databaseState: DatabaseState | undefined): Promise<Plan> {
-  if (existing) {
-    const plan = { ...(existing.plan as unknown as Plan) };
-    if (databaseState) {
-      plan.cmsState = databaseStateLabel(databaseState);
-      if (databaseState.established) {
-        plan.bootstrapRequested = false;
-      } else {
-        plan.bootstrapRequested = /^y(es)?$/i.test((await runtime.prompt("The current CMS database is not fully initialized. Prepare a first-admin bootstrap handoff for this current state? [y/N] ")).trim());
-      }
-    }
-    console.log(`Resuming the approved provisioning plan after current-state inspection:\n${planSummary(plan)}`);
-    if (!/^y(es)?$/i.test((await runtime.prompt("Resume this plan after revalidating remote state? [y/N] ")).trim())) throw new Error("Provisioning resume cancelled.");
-    return plan;
-  }
-
-  const currentName = typeof config.name === "string" && config.name !== WORKER_PLACEHOLDER ? config.name : "";
-  const workerName = normalizeName(workerOverride || currentName || await runtime.prompt("Worker name [my-site]: ") || "my-site");
-  if (!workerName) throw new Error("Worker name must include at least one letter or number.");
-  const d1 = bindingEntry(config, "d1_databases", "binding", "DB");
-  const r2 = bindingEntry(config, "r2_buckets", "binding", "MEDIA");
-  const d1Name = coreState === "fresh" ? normalizeName(await runtime.prompt(`D1 database name [${workerName}-db]: `) || `${workerName}-db`) : String(d1?.database_name);
-  const r2Name = coreState === "fresh" ? normalizeName(await runtime.prompt(`R2 bucket name [${workerName}-media]: `) || `${workerName}-media`) : String(r2?.bucket_name);
-  const kvTitle = coreState === "fresh" ? `${workerName}-sessions` : `${workerName}-sessions`;
-  const canonical = canonicalOriginFromSource(siteSource) ?? requireCanonicalOrigin(await runtime.prompt("Canonical HTTPS origin: "));
-  const newCore = coreState === "fresh";
-  const cmsState: Plan["cmsState"] = newCore ? "empty" : databaseState ? databaseStateLabel(databaseState) : "incomplete";
-  let bootstrapRequested = false;
-  if (newCore) bootstrapRequested = /^y(es)?$/i.test((await runtime.prompt("Prepare a first-admin bootstrap handoff for this new site? [y/N] ")).trim());
-  else if (databaseState?.established) bootstrapRequested = false;
-  else bootstrapRequested = /^y(es)?$/i.test((await runtime.prompt("The current CMS database is not fully initialized. Prepare a first-admin bootstrap handoff? [y/N] ")).trim());
-
-  const newsletterBinding = bindingEntry(config, "d1_databases", "binding", "NEWSLETTER_DB");
-  let newsletterEnabled = Boolean(newsletterBinding);
-  if (!newsletterEnabled) {
-    if (textConfigValue(siteSource, "enabled") === "true") throw new Error("src/site.config.ts enables the newsletter but NEWSLETTER_DB is not configured; opt in to complete setup or disable it manually.");
-    newsletterEnabled = /^y(es)?$/i.test((await runtime.prompt("Configure the newsletter now? [y/N] ")).trim());
-  }
+async function resolveNewsletter(
+  runtime: SetupRuntime,
+  config: Record<string, unknown>,
+  siteSource: string,
+  workerName: string,
+  newsletterBinding: Record<string, unknown> | undefined,
+  enabled: boolean,
+): Promise<Plan["newsletter"]> {
+  if (!enabled) return {
+    enabled: false,
+    newFeature: false,
+    databaseName: "",
+    senderAddress: "",
+    turnstileSiteKey: "",
+    expectedHostname: "",
+    consentVersion: "1.0",
+    rateLimitNamespaceId: "",
+  };
   const senderCandidate = textConfigValue(siteSource, "senderAddress");
   const hostnameCandidate = textConfigValue(siteSource, "expectedHostname");
-  const newsletter = newsletterEnabled ? {
+  const newsletter = {
     enabled: true,
     newFeature: !newsletterBinding,
     databaseName: typeof newsletterBinding?.database_name === "string" ? newsletterBinding.database_name : `${workerName}-newsletter`,
@@ -559,26 +582,69 @@ async function promptPlan(runtime: SetupRuntime, config: Record<string, unknown>
       const rate = bindingEntry(config, "ratelimits", "name", "NEWSLETTER_SUBSCRIBE_LIMITER");
       return typeof rate?.namespace_id === "number" || typeof rate?.namespace_id === "string" ? String(rate.namespace_id) : "";
     })(),
-  } : {
-    enabled: false,
-    newFeature: false,
-    databaseName: "",
-    senderAddress: "",
-    turnstileSiteKey: "",
-    expectedHostname: "",
-    consentVersion: "1.0",
-    rateLimitNamespaceId: "",
   };
-  if (newsletter.enabled && !newsletter.rateLimitNamespaceId) newsletter.rateLimitNamespaceId = positiveInteger(await runtime.prompt("Rate-limit namespace ID: "));
+  if (!newsletter.rateLimitNamespaceId) newsletter.rateLimitNamespaceId = positiveInteger(await runtime.prompt("Rate-limit namespace ID: "));
+  return newsletter;
+}
+
+async function resolveResend(runtime: SetupRuntime, config: Record<string, unknown>, newsletterEnabled: boolean): Promise<Plan["resend"]> {
   const existingSegment = objectEntry(config.vars ?? {}, "vars").RESEND_SEGMENT_ID;
   let resendEnabled = typeof existingSegment === "string" && existingSegment.length > 0;
-  if (!resendEnabled && newsletter.enabled) resendEnabled = /^y(es)?$/i.test((await runtime.prompt("Configure Resend Segment synchronization? [y/N] ")).trim());
+  if (!resendEnabled && newsletterEnabled) resendEnabled = /^y(es)?$/i.test((await runtime.prompt("Configure Resend Segment synchronization? [y/N] ")).trim());
   const resend = resendEnabled ? { enabled: true, segmentId: typeof existingSegment === "string" && existingSegment ? existingSegment : (await runtime.prompt("Resend Segment ID: ")).trim() } : { enabled: false };
   if (resend.enabled && !resend.segmentId) throw new Error("A Resend Segment ID is required.");
+  return resend;
+}
+
+function baseDeploymentCompleted(journal: ProvisioningJournal): boolean {
+  return journal.milestones.deployed === true && journal.milestones.triggersDeployed === true && journal.milestones.canonicalVerified === true;
+}
+
+async function promptPlan(runtime: SetupRuntime, config: Record<string, unknown>, siteSource: string, existing: ProvisioningJournal | undefined, workerOverride: string, coreState: CoreState, databaseState: DatabaseState | undefined, accountId: string, newsletterOptIn: boolean): Promise<Plan> {
+  if (existing) {
+    const plan = { ...(existing.plan as unknown as Plan) };
+    if (databaseState) {
+      plan.cmsState = databaseStateLabel(databaseState);
+      plan.bootstrapRequested = !databaseState.established;
+    }
+    let scopeChanged = false;
+    if (newsletterOptIn && !plan.newsletter.enabled) {
+      if (existing.pending.deployment || existing.pending.triggers) throw new Error("This plan still has pending provisioning work; finish the interrupted run before adding the newsletter with --newsletter.");
+      if (!baseDeploymentCompleted(existing)) throw new Error("The base site deployment is not complete yet; finish setup without --newsletter before adding the newsletter add-on.");
+      plan.newsletter = await resolveNewsletter(runtime, config, siteSource, plan.workerName, bindingEntry(config, "d1_databases", "binding", "NEWSLETTER_DB"), true);
+      plan.resend = await resolveResend(runtime, config, plan.newsletter.enabled);
+      scopeChanged = true;
+    }
+    console.log(`${scopeChanged ? "Extending the approved provisioning plan with the newsletter add-on" : "Resuming the approved provisioning plan after current-state inspection"}:\n${planSummary(plan, accountId)}`);
+    const resumePrompt = scopeChanged
+      ? "Approve this expanded Cloudflare provisioning plan (adds the newsletter to the existing site)? [y/N] "
+      : "Resume this approved plan after revalidating remote state? [y/N] ";
+    if (!/^y(es)?$/i.test((await runtime.prompt(resumePrompt)).trim())) throw new Error(scopeChanged ? "Expanded provisioning plan rejected." : "Provisioning resume cancelled.");
+    return plan;
+  }
+
+  const currentName = typeof config.name === "string" && config.name !== WORKER_PLACEHOLDER ? config.name : "";
+  const workerName = normalizeName(workerOverride || currentName);
+  if (!workerName) throw new Error("Worker name must include at least one letter or number.");
+  const d1 = bindingEntry(config, "d1_databases", "binding", "DB");
+  const r2 = bindingEntry(config, "r2_buckets", "binding", "MEDIA");
+  const d1Name = coreState === "fresh" ? `${workerName}-db` : String(d1?.database_name);
+  const r2Name = coreState === "fresh" ? `${workerName}-media` : String(r2?.bucket_name);
+  const kvTitle = `${workerName}-sessions`;
+  const canonical = canonicalOriginFromSource(siteSource) ?? requireCanonicalOrigin(await runtime.prompt("Canonical HTTPS origin: "));
+  const newCore = coreState === "fresh";
+  const cmsState: Plan["cmsState"] = newCore ? "empty" : databaseState ? databaseStateLabel(databaseState) : "incomplete";
+  const bootstrapRequested = !(databaseState?.established ?? false);
+
+  const newsletterBinding = bindingEntry(config, "d1_databases", "binding", "NEWSLETTER_DB");
+  const newsletterEnabled = Boolean(newsletterBinding) || newsletterOptIn;
+  if (!newsletterEnabled && newsletterEnabledInSource(siteSource)) throw new Error("src/site.config.ts enables the newsletter but NEWSLETTER_DB is not configured; pass --newsletter to complete its setup or disable it manually.");
+  const newsletter = await resolveNewsletter(runtime, config, siteSource, workerName, newsletterBinding, newsletterEnabled);
+  const resend = await resolveResend(runtime, config, newsletter.enabled);
 
   const plan: Plan = { newCore, bootstrapRequested, cmsState, workerName, d1Name, r2Name, kvTitle, canonicalOrigin: canonical, newsletter, resend };
-  console.log(`\nApproved provisioning creates only explicitly listed resources; no automatic rollback or deletion is performed.\n${planSummary(plan)}`);
-  if (!/^y(es)?$/i.test((await runtime.prompt("Approve this complete provisioning plan? [y/N] ")).trim())) throw new Error("Provisioning plan rejected.");
+  console.log(`\nApproved provisioning creates only explicitly listed resources; no automatic rollback or deletion is performed.\n${planSummary(plan, accountId)}`);
+  if (!/^y(es)?$/i.test((await runtime.prompt("Approve this complete Cloudflare provisioning plan (account, resources, custom domain, deployment, and cron triggers)? [y/N] ")).trim())) throw new Error("Provisioning plan rejected.");
   return plan;
 }
 
@@ -601,7 +667,7 @@ function createResourceJournal(name: string, id?: string): ResourceJournal {
 }
 
 async function apiList(runtime: SetupRuntime, account: string, endpoint: string, label: string, perPage = 1000): Promise<Record<string, unknown>[]> {
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for account API operations.");
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required for account API operations.");
   if (!endpoint.startsWith(`/accounts/${account}/`)) throw new Error(`Cloudflare account API endpoint is outside the approved account for ${label}.`);
   const resources: Record<string, unknown>[] = [];
   for (let page = 1; page <= 100; page += 1) {
@@ -628,7 +694,7 @@ async function listD1(runtime: SetupRuntime, root: string, account: string): Pro
 }
 
 async function listR2(runtime: SetupRuntime, account: string): Promise<Resource[]> {
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for account API operations.");
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required for account API operations.");
   const resources: Resource[] = [];
   let cursor: string | undefined;
   for (let page = 1; page <= 100; page += 1) {
@@ -667,7 +733,7 @@ async function listWorkers(runtime: SetupRuntime, account: string): Promise<Reso
 }
 
 async function createWorker(runtime: SetupRuntime, account: string, name: string): Promise<void> {
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required for account API operations.");
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required for account API operations.");
   let response: Response;
   try {
     response = await runtime.apiFetch(`${CLOUDFLARE_API}/accounts/${account}/workers/workers`, {
@@ -819,6 +885,7 @@ export async function ensureSecret(
   expected: BindingExpectation[],
 ) {
   if (names.has(name)) {
+    if (journal.secrets[name] !== "verified") runtime.progress?.note(`${name} already exists on the Worker version; inheriting it.`);
     journal.secrets[name] = "verified";
     await save(runtime, journalPath, journal);
     return;
@@ -1217,7 +1284,7 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
   assertBoundedTag(prepared.tag, "Prepared version");
   try {
     runtime.progress?.note("Building Astro site (full build output follows)");
-    await runtime.runInteractive(["bun", "run", "build"], { env: { CLOUDFLARE_API_TOKEN: runtime.apiToken, CLOUDFLARE_ACCOUNT_ID: account } });
+    await runtime.runInteractive(["bun", "run", "build"], { env: credentialEnvironment(runtime, account) });
     const builtConfig = join(root, "dist/server/wrangler.json");
     if (await runtime.fs.read(builtConfig) === null) throw new Error("The Astro build did not produce dist/server/wrangler.json; refusing to upload with the template config.");
     await runWranglerInteractiveWithConfig(runtime, root, account, builtConfig, ["versions", "upload", "--name", plan.workerName, "--tag", prepared.tag, "--message", prepared.tag], {});
@@ -1239,7 +1306,6 @@ async function prepareVersion(runtime: SetupRuntime, journal: ProvisioningJourna
 async function deployPreparedVersion(runtime: SetupRuntime, journal: ProvisioningJournal, journalPath: string, root: string, account: string, plan: Plan, expected: BindingExpectation[], phase: string) {
   if (!journal.preparedVersion?.versionId) throw new Error("No prepared Worker version is available for deployment; setup remains pending.");
   await confirmLegacyCutover(runtime, journal, journalPath, plan, `deployment (${phase})`);
-  if (!/^y(es)?$/i.test((await runtime.prompt(`Deploy the prepared ${phase} Worker version after verifying its protected prerequisites? [y/N] `)).trim())) throw new Error("Deployment remains pending; rerun setup to resume it.");
   try {
     await runWranglerInteractive(runtime, root, account, ["versions", "deploy", `${journal.preparedVersion.versionId}@100`, "--name", plan.workerName], {});
   } catch {
@@ -1263,7 +1329,6 @@ async function deployTriggers(runtime: SetupRuntime, journal: ProvisioningJourna
   journal.pending.triggers = true;
   await save(runtime, journalPath, journal);
   await confirmLegacyCutover(runtime, journal, journalPath, plan, "trigger deployment");
-  if (!/^y(es)?$/i.test((await runtime.prompt("Apply the approved Worker custom-domain, route, and cron triggers now? [y/N] ")).trim())) throw new Error("Trigger deployment remains pending; rerun setup to resume it.");
   try {
     await runWranglerInteractive(runtime, root, account, ["triggers", "deploy", "--name", plan.workerName], {});
   } catch {
@@ -1412,7 +1477,7 @@ async function verifyCanonicalOrigin(runtime: SetupRuntime, account: string, pla
   const source = await runtime.fs.read(path);
   if (source === null || canonicalOriginFromSource(source) !== plan.canonicalOrigin) throw new Error("The canonical origin was not verified before completion.");
   if (!triggersDeployed) throw new Error("Worker triggers were not deployed before canonical verification.");
-  if (!runtime.apiToken) throw new Error("Cloudflare API access is required to verify the canonical Worker attachment.");
+  if (!runtime.apiToken) throw new Error("Cloudflare authentication is required to verify the canonical Worker attachment.");
   let body: unknown;
   try {
     const hostname = new URL(plan.canonicalOrigin).hostname;
@@ -1458,13 +1523,22 @@ async function completeBootstrapHandoff(runtime: SetupRuntime, journal: Provisio
 export interface ProvisioningOptions {
   runtime: SetupRuntime;
   projectRoot?: string;
+  workerName?: string;
+  accountId?: string;
+  newsletter?: boolean;
 }
 
 export async function runProvisioning(options: ProvisioningOptions): Promise<void> {
   const runtime = options.runtime;
   const root = options.projectRoot ?? PROJECT_ROOT;
   runtime.progress?.section("Cloudflare account");
-  if (!runtime.apiToken) throw new Error("CLOUDFLARE_API_TOKEN is required and must be supplied through the environment; setup never stores it.");
+  if (!runtime.apiToken) {
+    const credential = await acquireWranglerCredential(runtime);
+    runtime.apiToken = credential.token;
+    runtime.authSource = credential.mode === "oauth" ? "wrangler" : "environment";
+  } else if (!runtime.authSource) {
+    runtime.authSource = "environment";
+  }
   const configPath = join(root, "wrangler.jsonc");
   const sitePath = join(root, "src/site.config.ts");
   const protectionPath = join(root, "src/lib/bootstrap-protection.ts");
@@ -1474,14 +1548,13 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
   if (configSource === null || siteSource === null || protectionSource === null || !protectionSource.includes("protectFirstAdminBootstrap")) throw new Error("Required configuration or first-admin protection source could not be verified.");
   const config = configObject(configSource);
   const configuredAccount = typeof config.account_id === "string" ? accountId(config.account_id) : undefined;
-  const requestedAccount = runtime.approvedAccountId || process.env.CLOUDFLARE_ACCOUNT_ID || configuredAccount || await runtime.prompt("Approved Cloudflare account ID: ");
-  const approvedAccount = accountId(requestedAccount);
+  const requestedAccount = options.accountId || runtime.approvedAccountId || process.env.CLOUDFLARE_ACCOUNT_ID || configuredAccount;
+  const approvedAccount = requestedAccount ? accountId(requestedAccount) : await chooseWranglerAccount(runtime);
   if (configuredAccount && configuredAccount !== approvedAccount) throw new Error("wrangler.jsonc account_id conflicts with the approved Cloudflare account.");
-  if (!/^y(es)?$/i.test((await runtime.prompt(`Use approved Cloudflare account ${approvedAccount}? [y/N] `)).trim())) throw new Error("Cloudflare account approval was not confirmed.");
   await withProgress(runtime, "Verifying account access", () => verifyAccount(runtime, approvedAccount));
   const coreState = coreConfigurationState(config);
   const configuredWorker = typeof config.name === "string" && config.name !== WORKER_PLACEHOLDER ? normalizeName(config.name) : "";
-  const workerCandidate = configuredWorker || normalizeName(await runtime.prompt("Worker name [my-site]: ") || "my-site");
+  const workerCandidate = (options.workerName ? normalizeName(options.workerName) : "") || configuredWorker || normalizeName(await runtime.prompt("Worker name [my-site]: ") || "my-site");
   if (!workerCandidate) throw new Error("Worker name must include at least one letter or number.");
   const provisioningRoot = join(root, JOURNAL_DIRECTORY);
   const release = await runtime.fs.acquireExclusive(provisioningLockPath(provisioningRoot, approvedAccount, workerCandidate));
@@ -1489,10 +1562,9 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     runtime.progress?.section("Plan and approval");
     const path = provisioningJournalPath(provisioningRoot, approvedAccount, workerCandidate);
     let journal = await loadProvisioningJournal(runtime.fs, path);
-    const resumed = Boolean(journal);
     let preflight: DatabaseState | undefined;
     if (coreState === "configured") preflight = await inspectDatabaseInitialization(runtime, root, approvedAccount, String(bindingEntry(config, "d1_databases", "binding", "DB")?.database_name));
-    const plan = await promptPlan(runtime, config, siteSource, journal ?? undefined, workerCandidate, coreState, preflight);
+    const plan = await promptPlan(runtime, config, siteSource, journal ?? undefined, workerCandidate, coreState, preflight, approvedAccount, Boolean(options.newsletter));
     if (journal && (journal.target.accountId !== approvedAccount || journal.target.workerName !== plan.workerName || journal.target.canonicalOrigin !== plan.canonicalOrigin)) throw new Error("The journal target does not match the approved account, Worker, or canonical origin.");
     if (!journal) {
       journal = createProvisioningJournal(
@@ -1581,12 +1653,9 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
     await establishWorker(runtime, journal, path, root, approvedAccount, plan, expectedBindings);
     const currentState = await inspectDatabaseInitialization(runtime, root, approvedAccount, plan.d1Name);
     plan.cmsState = databaseStateLabel(currentState);
+    plan.bootstrapRequested = !currentState.established;
     if (currentState.established) {
-      plan.bootstrapRequested = false;
       journal.pending.bootstrapHandoff = false;
-    } else if (resumed) {
-      plan.bootstrapRequested = /^y(es)?$/i.test((await runtime.prompt("The current CMS database is not fully initialized. Reconfirm preparation of a first-admin bootstrap handoff for this current state? [y/N] ")).trim());
-      if (!plan.bootstrapRequested) journal.pending.bootstrapHandoff = false;
     }
     journal.plan = plan as unknown as Record<string, unknown>;
     await save(runtime, path, journal);
@@ -1602,7 +1671,7 @@ export async function runProvisioning(options: ProvisioningOptions): Promise<voi
       if (legacy) await confirmLegacyCutover(runtime, journal, path, plan, "secret and migration operations");
       await ensureSecret(runtime, journal, path, root, approvedAccount, plan.workerName, "EMDASH_ENCRYPTION_KEY", {
         allowProvide: plan.newCore && !currentState.schemaInitialized,
-        provide: () => operatorSecret(runtime, journal, path, "EMDASH_ENCRYPTION_KEY", "Enter the EMDASH_ENCRYPTION_KEY generated with OpenSSL; input is hidden and the value is not stored by setup: ", encryptionKeyFormatError),
+        provide: () => operatorSecret(runtime, journal, path, "EMDASH_ENCRYPTION_KEY", "Enter the EMDASH_ENCRYPTION_KEY value from `npx emdash secrets generate`; input is hidden and the value is not stored by setup: ", encryptionKeyFormatError),
         validate: encryptionKeyFormatError,
       }, names, plan, expectedBindings);
       names = await secretNames(runtime, root, approvedAccount, plan, journal.preparedVersion?.versionId ?? "", expectedBindings);
@@ -1644,12 +1713,47 @@ export function createDefaultRuntime(): SetupRuntime {
   return defaultRuntime(createInterface({ input, output }));
 }
 
+export interface SetupCliArguments {
+  workerName?: string;
+  accountId?: string;
+  newsletter?: boolean;
+}
+
+const CLI_USAGE = "Usage: bun run cloudflare:setup [--name <worker>] [--account <account-id>] [--newsletter]";
+
+export function parseCliArguments(argv: string[]): SetupCliArguments {
+  const parsed: SetupCliArguments = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    const flag = argument.split("=", 1)[0];
+    const takeValue = () => {
+      const inline = argument.slice(flag.length + 1);
+      if (argument.startsWith(`${flag}=`) && inline.length > 0) return inline;
+      index += 1;
+      const next = argv[index];
+      if (next === undefined || next.startsWith("--")) throw new Error(`\`${flag}\` requires a value. ${CLI_USAGE}`);
+      return next;
+    };
+    if (flag === "--name") parsed.workerName = takeValue();
+    else if (flag === "--account") parsed.accountId = takeValue();
+    else if (flag === "--newsletter") parsed.newsletter = true;
+    else throw new Error(`Unknown setup argument \`${argument}\`. ${CLI_USAGE}`);
+  }
+  return parsed;
+}
+
 if (import.meta.main) {
-  const runtime = createDefaultRuntime();
-  runProvisioning({ runtime }).catch((error) => {
-    runtime.progress?.failure(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-  }).finally(() => {
-    runtime.close?.();
-  });
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) console.log(CLI_USAGE);
+  else {
+    const runtime = createDefaultRuntime();
+    (async () => {
+      await runProvisioning({ runtime, ...parseCliArguments(argv) });
+    })().catch((error) => {
+      runtime.progress?.failure(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }).finally(() => {
+      runtime.close?.();
+    });
+  }
 }
