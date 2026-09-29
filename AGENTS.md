@@ -97,6 +97,25 @@ token from the ignored `.env.cloudflare.local`
 export the value on the command line, so it reports the token's identity instead
 of prompting for an unrelated OAuth login.
 
+Before provisioning, have the user generate both deployment secrets with OpenSSL and
+save the resulting values (not the commands) in their password manager:
+
+```sh
+# EMDASH_ENCRYPTION_KEY: emdash_enc_v1_ plus 43 unpadded base64url chars.
+printf 'emdash_enc_v1_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+
+# EMDASH_BOOTSTRAP_SECRET: raw unpadded base64url value, no prefix.
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+```
+
+`EMDASH_ENCRYPTION_KEY` must match `emdash_enc_v1_` followed by exactly 43
+base64url characters (`A-Z`, `a-z`, `0-9`, `-`, `_`); anything else is rejected
+before upload. Never generate these on the user's behalf, never commit them, and
+never ask the user to paste them into chat or a command line: setup prompts for
+each saved value through hidden input, so the value is never echoed or written
+to disk. An established site's encryption key cannot be recovered if lost, so
+setup refuses to invent a replacement.
+
 Before provisioning, ask the user for their final canonical hostname. Confirm
 with them that the hostname lives in an active Cloudflare zone owned by that
 authenticated account, and obtain explicit approval before creating resources,
@@ -115,9 +134,9 @@ tracked `.env.cloudflare.local.example` to `.env.cloudflare.local` at mode
 `bun run --env-file=.env.cloudflare.local cloudflare:setup`. Never ask the user
 to paste a token into the conversation or into a command line, and never read,
 print, echo, or commit the file's value; the setup script reads the variables
-from the process environment. After a successful setup with no retry pending,
-have the user delete `.env.cloudflare.local` and revoke or delete the token in
-Cloudflare.
+from the process environment. After setup and bootstrap-secret removal succeed
+with no retry pending, have the user delete `.env.cloudflare.local` and revoke
+or delete the token in Cloudflare.
 
 Run that setup command only from the scaffolded site project being deployed and
 an interactive terminal so Wrangler can show any custom-domain or DNS conflict
@@ -127,8 +146,10 @@ because Wrangler's `versions upload` requires one prior deployment. That step is
 a versioning prerequisite, not a public site deployment: the real Astro output
 is built and uploaded as a version afterward, then deployed at 100% traffic,
 and only the later `wrangler triggers deploy` phase attaches the custom domain.
-The command creates the Worker, D1 database, R2 bucket, session KV
-namespace, and the `EMDASH_ENCRYPTION_KEY` secret; it then writes the Worker
+The command creates the Worker, D1 database, R2 bucket, and session KV
+namespace; for a fresh site it prompts for the saved `EMDASH_ENCRYPTION_KEY` and,
+when a first-admin bootstrap is prepared, the saved `EMDASH_BOOTSTRAP_SECRET`
+through hidden input, then uploads them. It then writes the Worker
 name and binding IDs to `wrangler.jsonc` and deploys the route/site URL
 configured above. Do not deploy while the placeholder IDs remain, and do not
 manually replace only some placeholders: the setup script rejects partially
@@ -142,7 +163,9 @@ Worker secrets are stored in Cloudflare and never committed.
 `.env.cloudflare.local` is a different thing: an ignored, operator-owned
 plaintext file holding the account-scoped setup token for the interactive
 provisioning run only, which must never be committed or reused as a Worker
-binding. `.dev.vars` is ignored and is only for local development; it cannot
+binding. `EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET` are operator-
+supplied from the password manager (§ provisioning) and never live in the repo.
+`.dev.vars` is ignored and is only for local development; it cannot
 create Cloudflare bindings either. The newsletter setup is optional and needs
 an onboarded Email Sending domain, Turnstile keys, and a Rate Limiting
 namespace. Skip it unless those values are available and the deployment

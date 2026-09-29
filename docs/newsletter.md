@@ -42,7 +42,7 @@ on Cloudflare D1 (for storage) and Cloudflare Email Sending (for delivery).
 ```typescript
 newsletter: {
   enabled: false,              // set to true when ready
-  description: "Occasional notes on engineering, projects, and ideas. No spam.",
+  description: "Occasional notes on engineering, projects, and ideas. No spam.", // Fallback when the CMS newsletter_page record is absent.
   senderAddress: "newsletter@your-domain.com",  // any address at your onboarded Email Sending domain
   turnstileSiteKey: "",        // public Turnstile site key (written here by setup)
   consentVersion: "1.0",       // bump when privacy policy changes
@@ -77,6 +77,10 @@ newsletter provisioning is enabled.
 | `NEWSLETTER_EMAIL` | Email Sending (`send_email`) | Transactional email delivery (confirmation emails). Configured with `allowed_sender_addresses`. |
 | `NEWSLETTER_SUBSCRIBE_LIMITER` | Rate Limiter (`ratelimits`) | Endpoint-scoped per-IP rate limiting for subscribe, confirm, and unsubscribe (5 requests per 60 seconds per endpoint). |
 
+The limiter's `namespace_id` is a positive integer string in `wrangler.jsonc`.
+Choose a value unique among rate-limit namespaces in the account; setup writes
+it as a string. It is binding configuration, not a separate resource to create.
+
 **All three bindings are required when newsletter is enabled.** If any binding
 is missing, the newsletter endpoints return 503. Turnstile and the rate limiter
 are not optional -- they are mandatory protections against automated abuse.
@@ -104,8 +108,9 @@ Before accepting that phase, complete these account-level prerequisites:
 1. Onboard the sender domain in Cloudflare Email Sending, including its required DNS records. Onboarding the domain is the only sender prerequisite; the individual sender address is not separately verified or approved.
 2. Create a Turnstile widget for the newsletter hostname and have its public site key and private secret ready. The command accepts the secret through no-echo input and never writes it to the repository or journal.
 3. Choose a positive integer `namespace_id` for `NEWSLETTER_SUBSCRIBE_LIMITER`, unique among the
-   rate-limit namespaces used in the account. There is no dashboard resource to create: the
-   binding declares the ID itself. See the Cloudflare
+   rate-limit namespaces used in the account. The setup prompt accepts digits
+   and writes them as a string in `wrangler.jsonc`; there is no dashboard resource
+   to create. See the Cloudflare
    [Rate Limiting binding documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
    for the binding shape.
 

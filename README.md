@@ -7,6 +7,7 @@ A personal-site theme built with Astro and [EmDash](https://emdashcms.com), runn
 - **CMS-backed blog and portfolio** — posts and projects are authored in the EmDash admin and queried at runtime; no local content files or rebuilds.
 - **CMS-managed pages** — root pages render at `/{slug}` and can be added to the primary navigation.
 - **Built-in admin** — author, edit, and publish at `/_emdash/admin`, including tags, featured flags, and optional comments.
+- **EmDash comments** — readers can comment on published posts; collection settings control availability and moderation.
 - **Content search** — search posts and projects from a dialog, backed by `/_emdash/api/search`.
 - **RSS and SEO endpoints** — `/rss.xml`, plus runtime-owned `/robots.txt` and `/sitemap.xml`.
 - **Shiki code blocks** — syntax highlighting for Portable Text code blocks in light and dark themes.
@@ -17,10 +18,7 @@ A personal-site theme built with Astro and [EmDash](https://emdashcms.com), runn
 
 ## Quick start
 
-EmDash themes are scaffolded with `create-astro`, which copies the template into
-a new standalone site project directory that you own and edit, separate from the
-upstream template source. Do that first. No Cloudflare account is needed for
-local work:
+EmDash themes are scaffolded with `create-astro`, which copies the template into a new standalone site project directory that you own and edit, separate from the upstream template source. Do that first. No Cloudflare account is needed for local work:
 
 ```bash
 bun create astro@latest my-site --template github:frankievalentine/minastro --no-ai
@@ -31,12 +29,9 @@ cp .dev.vars.example .dev.vars
 bun run cf:dev
 ```
 
-`npx create-astro@latest my-site --template github:frankievalentine/minastro --no-ai`
-works the same way if you prefer npm. The `--no-ai` flag keeps Minastro's own
-`AGENTS.md` and bundled skill guidance instead of letting `create-astro`
-overwrite them with its generic AI stub.
+`npx create-astro@latest my-site --template github:frankievalentine/minastro --no-ai` works the same way if you prefer npm. The `--no-ai` flag keeps Minastro's own `AGENTS.md` and bundled skill guidance instead of letting `create-astro` overwrite them with its generic AI stub.
 
-This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Before `cf:dev`, set the required `EMDASH_BOOTSTRAP_SECRET` local variable to a generated Base64URL value. Open the setup URL with the `bootstrap` query parameter once; the Worker replaces it with a signed HttpOnly cookie that lasts 15 minutes and redirects to a clean setup URL. The bootstrap URL credential remains reusable until the secret is manually revoked.
+This builds the site and runs the Worker locally on `http://localhost:8787` with simulated D1/R2/KV bindings. Before `cf:dev`, set the required `EMDASH_BOOTSTRAP_SECRET` local variable to a generated Base64URL value (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'`). Open the setup URL with the `bootstrap` query parameter once; the Worker replaces it with a signed HttpOnly cookie that lasts 15 minutes and redirects to a clean setup URL. The bootstrap URL credential remains reusable until the secret is manually revoked.
 
 - The committed `siteConfig.url` is `http://localhost:8787`, which matches this origin exactly — including for WebAuthn passkeys.
 - Local content persists in `.wrangler/state` across restarts. To start over, delete only that directory; the next run re-applies the seed.
@@ -47,45 +42,45 @@ This builds the site and runs the Worker locally on `http://localhost:8787` with
 
 ## Production prerequisites
 
-Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.12.0 or later on an even-numbered release line (see [Astro's install and setup guide](https://docs.astro.build/en/install-and-setup/)), and `bun run build` launches Node. This repo installs Wrangler itself (`wrangler` is a devDependency), so there is no global Wrangler install. The Cloudflare items below apply only to deployment, and the newsletter items only if you opt in.
+Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.12.0 or later on an even-numbered release line (see [Astro's install and setup guide](https://docs.astro.build/en/install-and-setup/)), and `bun run build` launches Node. Wrangler is a devDependency here, so there is no global install. The Cloudflare items below apply only to deployment, and the newsletter items only if you opt in.
 
 **Cloudflare deployment** — have these ready before you deploy:
 
-- **Final HTTPS hostname** (for example `https://example.com`) that already lives in an active Cloudflare DNS zone owned by the account you will deploy into. The setup script rejects `workers.dev`, non-HTTPS, and localhost origins.
+- **Final HTTPS hostname** (for example `https://example.com`) that already lives in an active Cloudflare DNS zone owned by the account you will deploy into. Setup rejects `workers.dev`, non-HTTPS, and localhost origins.
 - **Approved Cloudflare account ID** — the 32-character hexadecimal ID of the account you explicitly choose.
 - **Explicit approval** to create resources (Worker, D1, R2, KV, and newsletter resources if enabled), attach the custom domain, and deploy.
 - **Account-scoped Cloudflare API token**, scoped to that account and zone, with exactly these setup permissions:
   - Account: Account Settings Read, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit, Workers Scripts Edit.
   - Zone: Workers Routes Edit (required for the production custom domain).
-  - Create it with [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/); permission names are listed in the [API permissions reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
-- **Token file workflow.** The agent creates the ignored `.env.cloudflare.local`
-  from the tracked `.env.cloudflare.local.example`, leaves both values blank, and
-  sets mode `0600` so only your user can read it.
+  - Create it with [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/); permission names are in the [API permissions reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
+- **Token file workflow.** The agent creates the ignored `.env.cloudflare.local` from the tracked `.env.cloudflare.local.example`, leaves both values blank, and sets mode `0600`. Open `.env.cloudflare.local` in your own editor and fill in the existing `CLOUDFLARE_API_TOKEN=` and `CLOUDFLARE_ACCOUNT_ID=` lines; leave the tracked example untouched. Never put the token in chat or on a command line.
 
-  Open `.env.cloudflare.local` and enter the token there: fill in the existing
-  `CLOUDFLARE_API_TOKEN=` and `CLOUDFLARE_ACCOUNT_ID=` lines in your own editor,
-  and leave the tracked example untouched. Never put the token in chat or on a
-  command line.
-
-  After you approve the resources, the custom domain, and the deployment, the
-  agent runs `bun run --env-file=.env.cloudflare.local cloudflare:setup`. The file
-  stays plaintext on disk until you delete it and revoke the token after a
-  successful setup.
+  After you approve the resources, the custom domain, and the deployment, the agent runs `bun run --env-file=.env.cloudflare.local cloudflare:setup`. The file stays plaintext on disk until you delete it and revoke the token after setup, bootstrap-secret removal, and any retries are complete.
 - **An interactive terminal** for the setup run — Wrangler prompts about custom-domain and DNS conflicts, so do not run setup detached.
-- **A password manager** ready to store the secrets setup generates: `EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET`. An existing site requires its original encryption key, so keep it safe.
+- **Generated secrets, saved before setup.** Produce the two deployment secrets with these commands, then save the resulting values (not the commands) in your password manager:
+
+  ```sh
+  # EMDASH_ENCRYPTION_KEY: emdash_enc_v1_ plus 43 unpadded base64url chars.
+  printf 'emdash_enc_v1_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+
+  # EMDASH_BOOTSTRAP_SECRET: raw unpadded base64url value, no prefix.
+  openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+  ```
+
+  Save the first command's output as `EMDASH_ENCRYPTION_KEY` exactly as printed; the `emdash_enc_v1_` prefix is part of the value. Save the second as `EMDASH_BOOTSTRAP_SECRET`. Setup never generates these for you; it prompts for each saved value through hidden input, so nothing is echoed or written to disk. An existing site requires its original encryption key, so losing it is unrecoverable.
 
 **Site interview** — your agent can propose these and confirm them with you, so you do not need every value decided up front:
 
 - CMS-owned details: site title, tagline, primary navigation, and the logo image. Upload the logo in `/_emdash/admin` after the wizard; the seed does not carry uploaded media.
-- Developer-owned details in `src/site.config.ts`: avatar, bio, location, roles, public contact email, social links, and your analytics choice — Cloudflare Web Analytics (recommended), another provider, or none. Cloudflare Web Analytics needs no repo token and is switched on in the dashboard after deployment; any other provider needs its account or site plus the script URL and snippet details you want loaded.
-- Local EmDash setup is **not** a production prerequisite. You may run `bun run build` and `bun run check` locally at any time, but the production passkey is registered only on the final HTTPS hostname after deployment.
+- Developer-owned details in `src/site.config.ts`: avatar, bio, location, roles, public contact email, social links, and your analytics choice — Cloudflare Web Analytics (recommended), another provider, or none. Cloudflare Web Analytics needs no repo token and is switched on in the dashboard after deployment; any other provider needs its account or site plus the script URL and any snippet details you want loaded.
+- Local EmDash setup is **not** a production prerequisite. Run `bun run build` and `bun run check` locally at any time; the production passkey is registered only on the final HTTPS hostname after deployment.
 
 **Newsletter (opt in only)** — skip this unless you want signups:
 
 - Onboard your sending domain in [Cloudflare Email Service](https://developers.cloudflare.com/email-service/configuration/domains/) with its DNS records ready. Onboarding the domain is the only sender prerequisite; the individual sender address is not separately verified, so pick any address at that onboarded domain.
 - Choose the sender address, consent version, and public description.
 - Create a [Turnstile widget](https://developers.cloudflare.com/turnstile/get-started/widget-management/dashboard/) for the final hostname and keep both the public site key and the private secret key. Setup reads the secret through masked input and never writes it to the repository.
-- Choose a `namespace_id` for `NEWSLETTER_SUBSCRIBE_LIMITER`: any positive integer that is unique for the account. Per the [Rate Limiting binding docs](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/), there is no dashboard resource to create.
+- Choose a `namespace_id` for `NEWSLETTER_SUBSCRIBE_LIMITER`: any positive integer unique for the account. Per the [Rate Limiting binding docs](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/), there is no dashboard resource to create.
 - Create a `NEWSLETTER_ADMIN_TOKEN` of at least 32 characters in your password manager; setup prompts for the saved value.
 - Optional: a Resend Segment ID and API key, only if you want Resend segment synchronization.
 
@@ -97,8 +92,7 @@ Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.
 
 ## Set up with an agent
 
-Open a coding agent in your scaffolded site directory (the new project
-`create-astro` created, not the upstream template source) and paste:
+Open a coding agent in your scaffolded site directory (the new project `create-astro` created, not the upstream template source) and paste:
 
 ```text
 Set up my Minastro site from this scaffold. Operate in this standalone project
@@ -125,22 +119,24 @@ bio; my social links (GitHub, X/Twitter, LinkedIn, and a public contact email �
 I may skip any I do not use); my analytics choice — Cloudflare Web Analytics
 (recommended; the default), a different provider, or none — and whether to
 enable the newsletter signup and, if so, its sender address, Turnstile site
-key, expected hostname, consent version, and the short public description shown
-on the newsletter page. For Cloudflare Web Analytics, keep the custom analytics
+key, expected hostname, consent version, and a fallback newsletter description.
+For Cloudflare Web Analytics, keep the custom analytics
 hook in src/site.config.ts disabled and set it up in the Cloudflare dashboard
-after the site is deployed (see Analytics below); only ask for a script URL and
-domain — or provider-specific snippet details — if I pick a different provider.
-Leave the custom analytics hook and the newsletter signup disabled (and their
-optional sub-fields, including the description, clear) unless I confirm I want
-them and give you the values — never invent placeholders like "yourusername" or
-"your-domain.com".
+after the site is deployed (see the Analytics section); only ask for a script
+URL and domain — or provider-specific snippet details — if I pick a different
+provider. Leave the custom analytics hook and the newsletter signup disabled
+(and their optional sub-fields, including the description, clear) unless I
+confirm I want them and give you the values — never invent placeholders like
+"yourusername" or "your-domain.com".
 
 2. CMS-owned site details: the site title, tagline, logo, and the primary
-navigation menu I want. These are owned by the EmDash CMS at runtime, not
+navigation menu I want; if I enable the newsletter, ask for its visible page
+description too. These are owned by the EmDash CMS at runtime, not
 src/site.config.ts — never put them in site.config.ts. Apply the title, tagline,
-and primary menu through the bundled seed (which only initializes a fresh, empty
+primary menu, and newsletter page description through the bundled seed (which only initializes a fresh, empty
 database) or, on an already initialized site, through /_emdash/admin after the
-setup wizard; if you use the seed, edit .emdash/seed.json settings/menu and run
+setup wizard; if you use the seed, edit .emdash/seed.json settings/menu and its
+newsletter_page record, then run
 bun run types:generate. Set the logo through /_emdash/admin, since the seed does
 not carry the uploaded logo media.
 
@@ -158,13 +154,15 @@ account ID lines instead of giving me a shell command that makes the copy. Never
 read, print, or commit the value, and never ask me to paste a token into chat or
 onto a command line. Only after I have filled the file and explicitly approved
 the resources, the custom domain, and the deployment, run provisioning as
-`bun run --env-file=.env.cloudflare.local cloudflare:setup`, then have me delete
-the file and revoke the token once setup is complete and no retry is pending.
+`bun run --env-file=.env.cloudflare.local cloudflare:setup`. After the first
+admin is registered, use the same token to remove EMDASH_BOOTSTRAP_SECRET as
+documented in docs/operations.md; then have me delete the file and revoke the
+token once no retry is pending.
 Once the site is deployed, complete /_emdash/admin/setup on that final origin
 only — never register the production passkey on a workers.dev origin.
 ```
 
-You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.
+You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. Hand the agent `AGENTS.md` and [docs/operations.md](docs/operations.md) for the full runbook.
 
 ## How content works
 
@@ -183,23 +181,9 @@ EmDash is the sole source of runtime content. Editors work in the admin; there a
 
 **Developer-owned (`src/site.config.ts`):** presentation values with no CMS equivalent — bio, avatar, location, roles, social links, analytics, and newsletter integration settings. Site identity and navigation have no local fallbacks here; they come from the CMS only.
 
-The bundled `.emdash/seed.json` initializes empty databases only — it never updates an existing site's schema or content. On the first setup screen, keeping sample content gives you demo posts, projects, and pages; clearing **Include sample content (recommended for new sites)** starts clean while retaining schema, settings, and navigation.
+The bundled `.emdash/seed.json` initializes empty databases only — it never updates an existing site's schema or content. To change the content model, edit the seed and run `bun run types:generate`, which regenerates `.emdash/types.ts` and `.emdash/schema.json` offline; commit both. Never hand-maintain field definitions in `src/emdash-types.d.ts`. On the first setup screen, keeping sample content gives you demo posts, projects, and pages; clearing **Include sample content (recommended for new sites)** starts clean while retaining schema, settings, and navigation.
 
-## Use the template
-
-Common edits:
-
-- **Change text and content** — do it in the admin. No rebuild needed.
-- **Change presentation values** (bio, social links, analytics) — edit `src/site.config.ts`.
-- **Change the content model** — edit `.emdash/seed.json`, then regenerate types:
-
-  ```bash
-  bun run types:generate
-  ```
-
-  This regenerates `.emdash/types.ts` and `.emdash/schema.json` offline from the seed; commit both. Collection typing comes from these generated artifacts — never hand-maintain field definitions in `src/emdash-types.d.ts`.
-
-Local development uses `bun run cf:dev`; production deploys use `bun run cf:deploy`. Never deploy with bare `wrangler deploy`/`wrangler dev` — they skip the Astro SSR build.
+## Commands
 
 | Command | Action |
 | --- | --- |
@@ -214,78 +198,20 @@ Local development uses `bun run cf:dev`; production deploys use `bun run cf:depl
 | `bun run smoke:worker` | Start isolated local Worker bindings and smoke-test setup/runtime boundaries |
 | `bun run cf:deploy` | Build and deploy an already configured Worker |
 
+Use `bun run cf:dev` for local work and `bun run cf:deploy` for later production deploys. Never deploy with bare `wrangler deploy`/`wrangler dev` — they skip the Astro SSR build.
+
 ## Deployment
 
-Deployment is optional — you can develop locally indefinitely. When you are ready, see [AGENTS.md](AGENTS.md) for provisioning requirements and responsibilities, and [docs/operations.md](docs/operations.md) for the full runbook: backups, restores, staging isolation, post-cutover checks, and production passkey setup.
+Deployment is optional; you can develop locally indefinitely. Follow the [manual deployment guide](docs/manual-deployment.md) to set up a site without an agent. [AGENTS.md](AGENTS.md) covers provisioning requirements, and [docs/operations.md](docs/operations.md) has backups, restores, staging isolation, post-cutover checks, and passkey recovery. CI and the isolated local Worker smoke test are documented in [docs/ci.md](docs/ci.md).
 
-CI and the isolated local Worker smoke test are documented in [docs/ci.md](docs/ci.md).
+## Advanced integrations
+
+The bundled EmDash skill, the optional `emdash-docs` MCP server, and the deployed-site MCP endpoint are documented in [AGENTS.md](AGENTS.md). A fresh scaffold includes the skill already, and Codex, OpenCode, and Claude Code all discover it without a registry install. Setup never depends on the MCP server; when its tools are not callable, read https://docs.emdashcms.com/ directly.
 
 ## Analytics
 
-Cloudflare Web Analytics is the recommended default for production sites deployed through this template. It needs no script tag, token, or Worker binding in this repository: you enable it in the Cloudflare dashboard once the site is live on its custom domain, and Cloudflare injects the beacon into your responses. The beacon script itself loads from `static.cloudflareinsights.com`, while its measurements post to your own origin at `/cdn-cgi/rum`.
-
-To turn it on, after the site responds on the final HTTPS hostname:
-
-1. In the Cloudflare dashboard for the zone that owns your hostname, open **Web Analytics** and add the site (this is the proxied-hostname flow; it requires the hostname to be proxied through Cloudflare, which is how this template attaches its custom domain).
-2. Verify it is live rather than assuming. Load a public page and check the network panel for the beacon script, then navigate within the site or hide the tab and confirm the `POST /cdn-cgi/rum` request fires. Allow some delay for ingestion before the dashboard shows data.
-3. Auto-injection covers the whole zone, so it also applies to `/_emdash/admin`. SPA navigation on Minastro is tracked automatically, with no extra configuration. If the beacon never appears, check that responses do not send `Cache-Control: public, no-transform` on the public HTML, which suppresses automatic injection; if they do, remove that directive.
-
-Because Cloudflare injects the site-wide beacon itself, leave the custom analytics hook in `src/site.config.ts` disabled (`analytics.enabled: false`) when you choose Cloudflare Web Analytics. Never put a Cloudflare token, account ID, or snippet into the config for this option, and do not also add a custom script — that only creates duplicate or redundant tracking.
-
-If you prefer a different provider, or none at all, that is fully supported:
-
-- **Another provider:** set `analytics.enabled: true` with its `url`, and set `domain` only if the provider reads a `data-domain` attribute. The template loads it through the Partytown `text/partytown` script in `src/layouts/Layout.astro`, so it is offloaded from the main thread. Provider snippets that need something other than a script `src` plus `data-domain` (extra inline config, a different attribute scheme such as `data-website-id`, an `async` loader) require editing `Layout.astro` — the current hook only covers the plain script-tag case.
-- **None:** leave `analytics.enabled: false`, and also disable or skip Cloudflare Web Analytics in the dashboard. Cloudflare injection is independent of this config, so the hook alone does not turn analytics off.
+Cloudflare Web Analytics is the recommended production default: enable it in the Cloudflare dashboard after the site is live on its custom domain, and Cloudflare auto-injects the site-wide beacon. Keep `analytics.enabled: false` in `src/site.config.ts` for that option. For another provider, or to turn analytics off, see [docs/analytics.md](docs/analytics.md).
 
 ## Newsletter
 
 The newsletter page is visible by default, but signup stays disabled until its opt-in integration is provisioned (an onboarded Email Sending domain with DNS, a Turnstile site key and secret, a rate-limit namespace ID, and a `NEWSLETTER_ADMIN_TOKEN`). See [Production prerequisites](#production-prerequisites) and [docs/newsletter.md](docs/newsletter.md) for architecture, configuration, and operations.
-
-## Advanced integrations
-
-### EmDash agent skill
-
-This template bundles EmDash's official `building-emdash-site` agent skill at
-`.agents/skills/building-emdash-site/SKILL.md`, together with its
-`references/` documents. It is version-pinned to the EmDash release this
-template installs (`emdash` 1.0.1 in `package.json`), so its guidance matches
-the runtime you actually get. A fresh scaffold created from this template
-contains it already — nothing extra to install.
-
-This is the primary reference for EmDash work in a scaffolded site. Point your
-agent at `SKILL.md`, and follow the repository's own conventions where the
-skill describes generic EmDash projects: the seed is `.emdash/seed.json`,
-types regenerate with `bun run types:generate`, and local runs use
-`bun run cf:dev`.
-
-Because the skill is pinned to the installed release, use the official
-documentation at https://docs.emdashcms.com/ for anything newer — release
-notes, changed APIs, or newly added features.
-
-The skill resolves for each agent client without installing anything: Codex and
-OpenCode both discover `.agents/skills` directly, Claude Code discovers it
-through the committed `.claude/skills` symlink to `.agents/skills`, and
-`AGENTS.md` also points agents at the same files. No skill registry install is
-required for any of them.
-
-### EmDash MCP
-
-Optional supplement to the bundled skill, not a replacement; setup never
-depends on it. This repository optionally declares the public `emdash-docs`
-docs MCP server, which is read-only and needs no token, in:
-
-- `.mcp.json` — Claude Code project scope.
-- `.codex/config.toml` — Codex project scope, under `[mcp_servers.emdash-docs]`.
-
-Skill registries such as `skills.sh` install agent skills only — they cannot
-install or register an MCP server. Register the server through your client's own
-configuration.
-
-Codex loads project-scoped config only for a trusted repository. On first use in
-a new project, approve the trust prompt, then start a new session so the server
-is picked up; the tools are not callable in a session that was already running
-before the config was added. When the MCP tools are not callable, read
-https://docs.emdashcms.com/ directly instead of reporting the docs as
-unavailable.
-
-Your deployed site also exposes `<your-deployment-origin>/_emdash/api/mcp`, which can access live content. Configure it per user and per client — never commit it to this repository. Authenticate with OAuth/device flow or a locally stored personal access token, starting with the least-privilege `content:read` scope. Never commit PATs or write/admin credentials here, and verify the endpoint after deployment before relying on it.

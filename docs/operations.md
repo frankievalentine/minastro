@@ -73,13 +73,36 @@ Never provision, attach a domain, or deploy without explicit approval.
    `CLOUDFLARE_ACCOUNT_ID` into the terminal for the run remains an accepted
    alternative that writes no file at all.
 
-   Once setup succeeds and no retry is pending, delete `.env.cloudflare.local`
-   and revoke or delete the token in Cloudflare.
+   Once setup and bootstrap-secret removal succeed and no retry is pending,
+   delete `.env.cloudflare.local` and revoke or delete the token in Cloudflare.
 3. Confirm the final canonical hostname with the site owner and verify it lives
    in an active Cloudflare zone owned by that account.
 4. Obtain explicit approval before creating resources, attaching the custom
    domain, or deploying.
-5. Only then set `src/site.config.ts` to `https://<HOSTNAME>` and add
+5. Generate both deployment secrets with OpenSSL and save the resulting *values* in a
+   password manager before the setup run. Save the values themselves, not the
+   commands. Setup prompts for each saved value through hidden input; it does
+   not generate them for you.
+
+   `EMDASH_ENCRYPTION_KEY` must match EmDash's `emdash_enc_v1_` envelope:
+   the prefix followed by 43 unpadded base64url characters (32 random bytes,
+   alphabet `A-Z`, `a-z`, `0-9`, `-`, `_`). Generate the body and prepend the
+   prefix:
+
+   ```sh
+   printf 'emdash_enc_v1_%s\n' "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
+   ```
+
+   `EMDASH_BOOTSTRAP_SECRET` is a raw base64url body with no prefix:
+
+   ```sh
+   openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'
+   ```
+
+   Store both values in the password manager. Never commit them, never paste
+   them into a chat, and never pass them on a command line. Losing the
+   encryption key permanently loses every secret encrypted with it.
+6. Only then set `src/site.config.ts` to `https://<HOSTNAME>` and add
    `{ "pattern": "<HOSTNAME>", "custom_domain": true }` to `routes` in
    `wrangler.jsonc`.
 
@@ -100,7 +123,10 @@ normal prompts and output.
 
 Provisioning is resumable. The command writes only non-secret state to an
 atomic journal under `.wrangler/provisioning/` and revalidates every remote
-resource before continuing.
+resource before continuing. It never generates `EMDASH_ENCRYPTION_KEY` or
+`EMDASH_BOOTSTRAP_SECRET` for you: it prompts for the saved OpenSSL values
+(§0 step 5) through hidden input and keeps only their journal state, never the
+values.
 
 On a genuinely new Worker, Wrangler's `versions upload` needs one prior
 deployment to exist, so setup first deploys an inert base Worker: a generated
@@ -117,8 +143,33 @@ finally deploys exactly that prepared version at 100% traffic. It then runs the
 separate interactive `wrangler triggers deploy` phase for the reconciled custom
 domain, route, and cron triggers before verifying the deployment identity,
 bindings, custom-domain attachment, and canonical origin. An uninitialized site
-must return the same-origin setup redirect at `/_emdash/admin/setup`; setup
+must return either a same-origin setup redirect at `/_emdash/admin/setup` or a
+public homepage with that setup route protected by the bootstrap gate. Setup
 does not accept an arbitrary successful or cross-origin response.
+
+If canonical-origin verification fails right after the custom domain is
+attached, rule out DNS propagation or a stale local negative cache before
+changing Worker code or config. Compare an external resolver against your local
+default. These checks are read-only and non-secret:
+
+```sh
+dig +short <HOSTNAME> @1.1.1.1
+dig +short <HOSTNAME>
+curl -sS -o /dev/null -w '%{http_code}\n' --resolve <HOSTNAME>:443:<IP> https://<HOSTNAME>/
+```
+
+If the public resolver already returns the Cloudflare anycast IPs while your
+local resolver returns nothing or an unrelated address, the Worker, route, and
+`siteConfig.url` are likely correct and only local resolution is behind: wait
+out the record TTL, or flush your resolver's own cache (macOS:
+`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`; Linux with
+systemd-resolved: `resolvectl flush-caches`) and retest. A same-origin setup
+redirect is not a substitute for a verified canonical origin: do not relax the
+check or deploy with a `workers.dev` fallback to work around this. If both
+resolvers already agree on the expected anycast IPs and verification still
+fails, treat it as a real Worker or routing problem and continue diagnosing the
+deployment.
+
 If a resource create, secret upload, migration, deployment, or browser handoff is
 interrupted, rerun `bun run cloudflare:setup`; it will not retry an ambiguous
 resource create or silently rotate a secret. A pending secret operation requires
@@ -128,10 +179,12 @@ rollback or deletion is performed. A lock left by a terminated process is not
 removed automatically; confirm no setup process is running before removing it
 manually.
 
-During first provisioning of an incomplete CMS database, the script generates a
-high-entropy Base64URL `EMDASH_BOOTSTRAP_SECRET`, adds it with
-`wrangler versions secret put` to the prepared version before deployment, and
-never prints it.
+Before uploading `EMDASH_ENCRYPTION_KEY` and, for a first-admin bootstrap,
+`EMDASH_BOOTSTRAP_SECRET`, the script prompts for each saved OpenSSL value
+(§0 step 5) through hidden input: nothing is echoed, logged, or written to disk,
+and the raw base64url is uploaded with `wrangler versions secret put` to the
+prepared version. An empty value is rejected and setup never invents a
+replacement.
 It opens the bootstrap URL on that canonical origin in the
 default browser; if that is unavailable, it copies the URL to the clipboard
 without printing it. Complete setup on that canonical origin. The URL redirects
@@ -237,11 +290,14 @@ final canonical hostname:
 4. After the first administrator is initialized, remove the bootstrap secret:
 
    ```sh
-   bunx wrangler secret delete EMDASH_BOOTSTRAP_SECRET
+   bun run --env-file=.env.cloudflare.local wrangler secret delete EMDASH_BOOTSTRAP_SECRET
    ```
 
    This revokes any remaining bootstrap cookies and prevents another first-admin
-   bootstrap attempt. If setup must be recovered before an administrator exists,
+   bootstrap attempt. Run it before deleting or revoking the setup token. If you
+   used Wrangler login or exported credentials instead of the token file, use
+   `bunx wrangler secret delete EMDASH_BOOTSTRAP_SECRET` in that authenticated
+   session. If setup must be recovered before an administrator exists,
    or the site is reset and setup is being reopened, configure a newly generated
    Base64URL secret with Wrangler before reopening setup; changing the secret
    invalidates previously issued cookies. Keep the replacement out of shell
@@ -274,11 +330,12 @@ final canonical hostname:
    fi
    ```
 
-   If provisioning reports that the secret was created but deployment or browser
-   handoff failed; rerun setup and recover the saved value when prompted. The secret cannot
-   be retrieved from Cloudflare; setup never silently rotates it. If the value
-   was not saved, stop and perform the documented manual recovery flow
-   explicitly. The command clears its generated value after handoff.
+   If provisioning reports that the secret was uploaded but deployment or browser
+   handoff failed, rerun setup and supply the saved value when prompted. The
+   secret cannot be retrieved from Cloudflare and setup never generates or
+   silently rotates it. If the value was not saved, stop and perform the
+   documented manual recovery flow explicitly. This rotation script clears its
+   shell variable after handoff.
 
 ## 6. Newsletter observability
 
