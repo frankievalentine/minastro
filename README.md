@@ -58,19 +58,19 @@ Local work needs Bun and a supported Node.js release: Astro requires Node.js 22.
   - Account: Account Settings Read, D1 Edit, Workers R2 Storage Edit, Workers KV Storage Edit, Workers Scripts Edit.
   - Zone: Workers Routes Edit (required for the production custom domain).
   - Create it with [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/); permission names are listed in the [API permissions reference](https://developers.cloudflare.com/fundamentals/api/reference/permissions/).
-- **Token file workflow.** Create the ignored local file from the tracked example:
+- **Token file workflow.** The agent creates the ignored `.env.cloudflare.local`
+  from the tracked `.env.cloudflare.local.example`, leaves both values blank, and
+  sets mode `0600` so only your user can read it.
 
-  ```sh
-  install -m 600 .env.cloudflare.local.example .env.cloudflare.local
-  ```
+  Open `.env.cloudflare.local` and enter the token there: fill in the existing
+  `CLOUDFLARE_API_TOKEN=` and `CLOUDFLARE_ACCOUNT_ID=` lines in your own editor,
+  and leave the tracked example untouched. Never put the token in chat or on a
+  command line.
 
-  Fill in the token and account ID in your editor, and confirm the resource, deployment, and custom-domain approval. Only then run setup:
-
-  ```sh
-  bun run --env-file=.env.cloudflare.local cloudflare:setup
-  ```
-
-  Never put the token in chat or on a command line. The file is plaintext on disk until you delete it; delete it and revoke the token after a successful setup.
+  After you approve the resources, the custom domain, and the deployment, the
+  agent runs `bun run --env-file=.env.cloudflare.local cloudflare:setup`. The file
+  stays plaintext on disk until you delete it and revoke the token after a
+  successful setup.
 - **An interactive terminal** for the setup run — Wrangler prompts about custom-domain and DNS conflicts, so do not run setup detached.
 - **A password manager** ready to store the secrets setup generates: `EMDASH_ENCRYPTION_KEY` and `EMDASH_BOOTSTRAP_SECRET`. An existing site requires its original encryption key, so keep it safe.
 
@@ -151,16 +151,17 @@ secrets, or deployments without my explicit approval. Before any production
 provisioning, ask me for my final canonical hostname and the explicitly approved
 Cloudflare account ID, then set site.config.ts:url to https://<hostname>.
 Require an account-scoped CLOUDFLARE_API_TOKEN with the least-privilege scopes
-documented in docs/operations.md. Have me put the token and the account ID into
-an ignored .env.cloudflare.local copied from .env.cloudflare.local.example and
-kept at mode 0600, then run provisioning as
-`bun run --env-file=.env.cloudflare.local cloudflare:setup`. Never ask me to
-paste a token into chat or into a command, never read, print, or commit the
-value, and have me delete the file and revoke the token once setup is complete
-and no retry is pending. Exporting the two variables into the shell for the run
-remains an accepted alternative. After I approve, follow AGENTS.md to configure
-and deploy, then complete /_emdash/admin/setup on that final origin only — never
-register the production passkey on a workers.dev origin.
+documented in docs/operations.md. Create the ignored .env.cloudflare.local from
+the tracked .env.cloudflare.local.example with both values left blank and mode
+0600, then ask me to open it in my own editor and fill in the existing token and
+account ID lines instead of giving me a shell command that makes the copy. Never
+read, print, or commit the value, and never ask me to paste a token into chat or
+onto a command line. Only after I have filled the file and explicitly approved
+the resources, the custom domain, and the deployment, run provisioning as
+`bun run --env-file=.env.cloudflare.local cloudflare:setup`, then have me delete
+the file and revoke the token once setup is complete and no retry is pending.
+Once the site is deployed, complete /_emdash/admin/setup on that final origin
+only — never register the production passkey on a workers.dev origin.
 ```
 
 You remain responsible for account choice, resource approval, domain/zone ownership, passkey registration, and any optional third-party credentials. See [Deployment](#deployment) below or hand the agent `AGENTS.md` and `docs/operations.md` for the full runbook.
