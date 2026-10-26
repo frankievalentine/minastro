@@ -20,6 +20,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      # Astro exits on an unsupported Node.js version (7.4 requires 22.23.4 or
+      # later), so pin the runtime instead of using the runner image's default.
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:

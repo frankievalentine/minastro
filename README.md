@@ -10,7 +10,7 @@ A personal-site theme built with Astro and [EmDash](https://emdashcms.com), runn
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) and Node.js 22.12.0 or later on an even-numbered release line.
+Requires [Bun](https://bun.sh) and Node.js 22.23.4 or later on an even-numbered release line.
 
 ```sh
 bun create astro@latest my-site --template github:frankievalentine/minastro --no-ai
