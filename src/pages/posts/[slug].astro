@@ -1,13 +1,13 @@
 ---
 export const prerender = false;
 
-import { decodeSlug, getCollectionInfo, getEmDashEntry, getSiteSettings, extractPlainText } from "emdash";
+import { decodeSlug, getCollectionInfo, getEmDashEntry, getSeoMeta, getSiteSettings, extractPlainText } from "emdash";
 import { Image, PortableText } from "emdash/ui";
 import { CommentForm, Comments } from "emdash/ui/comments";
 import BackToTop from "../../components/ui/BackToTop.astro";
 import CodeBlock from "../../components/CodeBlock.astro";
 import Layout from "../../layouts/Layout.astro";
-import { formatDate, readingTime } from "../../utils";
+import { formatDate, imageFieldUrl, readingTime } from "../../utils";
 
 const slug = decodeSlug(Astro.params.slug);
 if (!slug) {
@@ -71,12 +71,20 @@ const postData: PostData = {
 };
 
 const timeToRead = readingTime(contentRaw);
+// The SEO panel title wins for <title>; EmDashHead overlays the rest of the
+// panel (description, image, canonical, noindex) from `content` below.
+const seo = getSeoMeta(entry);
 ---
 
 <Layout
-  title={postData.title}
+  title={seo.title}
   description={postData.description}
   currentPage={`/posts/${entry.id}`}
+  image={imageFieldUrl(entry.data.featured_image, Astro.site)}
+  type="article"
+  publishedTime={entry.data.publishedAt}
+  modifiedTime={entry.data.updatedAt}
+  content={{ collection: "posts", id: entry.data.id, slug }}
 >
   <div class="max-w-2xl mx-auto px-6 py-12 md:py-16">
     <!-- Back link -->

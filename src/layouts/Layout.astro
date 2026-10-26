@@ -5,12 +5,25 @@ import Search from "../components/Search.astro";
 import SidebarNavigationIcon from "../components/SidebarNavigationIcon.astro";
 import { siteConfig } from "../site.config";
 import { getEmDashCollection, getMenu, getSiteSettings } from "emdash";
+import { createPublicPageContext } from "emdash/page";
+import { EmDashBodyEnd, EmDashBodyStart, EmDashHead } from "emdash/ui";
 
 interface Props {
   currentPage?: string;
   description?: string;
   standalone?: boolean;
   title?: string;
+  /** Absolute image URL for og:image when the entry's SEO panel sets none. */
+  image?: string | null;
+  type?: "website" | "article";
+  publishedTime?: Date | null;
+  modifiedTime?: Date | null;
+  /**
+   * The content entry this page renders. `id` is the database ID
+   * (`entry.data.id`), not the slug. Enables EmDash's SEO panel overlay and
+   * entry-scoped plugin contributions.
+   */
+  content?: { collection: string; id: string; slug?: string | null };
 }
 
 type NavigationIconKey = "page" | "book" | "user" | "briefcase" | "compass" | "link" | "file" | "folder" | "calendar" | "heart" | "star" | "lightbulb" | "globe" | "code" | "camera" | "music" | "message" | "settings";
@@ -145,6 +158,11 @@ const {
   description: pageDescription,
   currentPage = "/",
   standalone = false,
+  image,
+  type = "website",
+  publishedTime,
+  modifiedTime,
+  content,
 } = Astro.props;
 const title = pageTitle ?? siteName;
 const description = pageDescription ?? cmsTagline ?? "";
@@ -152,6 +170,34 @@ const description = pageDescription ?? cmsTagline ?? "";
 const siteTitle =
   title === siteName ? title : `${title} • ${siteName}`;
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+// EmDashHead renders description, canonical, Open Graph, Twitter, JSON-LD,
+// and site verification tags from this context, overlays the entry's SEO
+// panel values when `content` is set, and adds plugin contributions.
+const pageContext = createPublicPageContext({
+  Astro,
+  kind: content ? "content" : "custom",
+  pageType: type,
+  title: siteTitle,
+  pageTitle: title,
+  description,
+  canonical: canonicalURL.href,
+  image,
+  content,
+  articleMeta:
+    type === "article"
+      ? {
+          publishedTime: publishedTime?.toISOString() ?? null,
+          modifiedTime: modifiedTime?.toISOString() ?? null,
+          author: siteName,
+        }
+      : undefined,
+  siteName,
+  siteUrl: Astro.site?.origin,
+});
+// EmDashHead emits the CMS favicon when one is set; the bundled icons are
+// only the fallback.
+const hasCmsFavicon = Boolean(cmsSettings?.favicon?.url);
 
 function isActive(href: string): boolean {
   if (href === "/") {
@@ -172,27 +218,18 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     <meta name="generator" content={Astro.generator}>
 
     <title>{siteTitle}</title>
-    <meta name="title" content={siteTitle}>
-    <meta name="description" content={description}>
     <meta name="author" content={siteName}>
-    <link rel="canonical" href={canonicalURL}>
 
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    {!hasCmsFavicon && (
+      <>
+        <link rel="icon" href="/favicon.ico" sizes="any">
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+      </>
+    )}
     <link rel="manifest" href="/manifest.webmanifest">
 
-    <meta property="og:type" content="website">
-    <meta property="og:url" content={canonicalURL}>
-    <meta property="og:title" content={siteTitle}>
-    <meta property="og:description" content={description}>
-    <meta property="og:site_name" content={siteName}>
+    <EmDashHead page={pageContext} />
     <meta property="og:locale" content="en_US">
-    <meta property="article:author" content={siteName}>
-
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content={canonicalURL}>
-    <meta property="twitter:title" content={siteTitle}>
-    <meta property="twitter:description" content={description}>
 
     <meta
       name="theme-color"
@@ -244,6 +281,7 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
     </script>
   </head>
   <body class="min-h-svh bg-background text-foreground antialiased">
+    <EmDashBodyStart page={pageContext} />
     {!standalone && <Search />}
 
     {!standalone && <aside id="site-sidebar" class="sidebar" data-side="left">
@@ -871,5 +909,6 @@ const avatarInitial = siteName.charAt(0).toUpperCase();
 
       document.addEventListener("astro:page-load", enhanceCodeBlocks);
     </script>
+    <EmDashBodyEnd page={pageContext} />
   </body>
 </html>

@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { decodeSlug, getEmDashEntry } from "emdash";
+import { decodeSlug, getEmDashEntry, getSeoMeta } from "emdash";
 import type { PortableTextBlock } from "emdash";
 import CmsPageView from "../components/CmsPageView.astro";
 
@@ -44,7 +44,9 @@ const content = Array.isArray(page.content)
 
 <CmsPageView
   title={page.title}
+  seoTitle={getSeoMeta(entry).title}
   description={page.description}
   currentPage={`/${pageSlug}`}
   content={content}
+  entry={{ collection: "pages", id: entry.data.id, slug: pageSlug }}
 />

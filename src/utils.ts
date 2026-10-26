@@ -55,6 +55,23 @@ export function formatDate(
   });
 }
 
+/**
+ * Absolute URL for an image field value, for use as an og:image fallback.
+ * Mirrors EmDash's own templates: a direct `src` wins, otherwise local media
+ * is served from the internal file route by storage key or media ID.
+ */
+export function imageFieldUrl(value: unknown, origin: string | URL | undefined): string | undefined {
+  if (typeof value !== "object" || value === null || !origin) return undefined;
+  const image = value as { src?: unknown; id?: unknown; meta?: { storageKey?: unknown } };
+  if (typeof image.src === "string" && image.src) {
+    return new URL(image.src, origin).href;
+  }
+  const key =
+    (typeof image.meta?.storageKey === "string" && image.meta.storageKey) ||
+    (typeof image.id === "string" && image.id);
+  return key ? new URL(`/_emdash/api/media/file/${key}`, origin).href : undefined;
+}
+
 export function readingTime(content: string): string {
   const words = content.trim().split(/\s+/).length;
   const minutes = Math.ceil(words / 200);
