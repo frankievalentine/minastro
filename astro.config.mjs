@@ -26,7 +26,11 @@ export default defineConfig({
       // (shared caches remain effective); editors get an "Edit" pill from a
       // bootstrap script and a fresh, never-cached `_edit` render.
       toolbar: "client",
-      database: d1({ binding: "DB" }),
+      // Sessions plus coalescing batch reads issued together (such as the
+      // layout's parallel settings/menu/collection queries) into one D1
+      // round trip, with or without read replication. `coalesce` is
+      // experimental: await a read before a write that must not affect it.
+      database: d1({ binding: "DB", session: "auto", coalesce: true }),
       storage: r2({ binding: "MEDIA" }),
     }),
   ],

@@ -117,7 +117,14 @@ const projectData: ProjectData = {
       <p class="text-muted-foreground leading-relaxed mb-4">
         {projectData.description}
       </p>
-      {entry.data.featured_image && <Image image={entry.data.featured_image} alt={imageAlt(entry.data.featured_image, entry.data.title)} width={800} height={450} class="mb-4 aspect-[16/9] w-full rounded-md object-cover" />}
+      {entry.data.featured_image && (
+        <figure class="mb-4">
+          <Image image={entry.data.featured_image} alt={imageAlt(entry.data.featured_image, entry.data.title)} width={800} height={450} class="aspect-[16/9] w-full rounded-md object-cover" />
+          {entry.data.featured_image.caption?.trim() && (
+            <figcaption class="mt-2 text-xs text-muted-foreground">{entry.data.featured_image.caption}</figcaption>
+          )}
+        </figure>
+      )}
 
       <div class="flex items-center gap-4 flex-wrap">
         {projectData.github && (
