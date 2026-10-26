@@ -3,6 +3,9 @@
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist"],
   "compilerOptions": {
-    "strictNullChecks": true
+    // TypeScript 6 no longer includes every installed @types package by
+    // default. Bun's globals and bun:* modules are used by scripts and tests;
+    // Cloudflare Workers types are referenced from src/env.d.ts.
+    "types": ["bun"]
   }
 }
