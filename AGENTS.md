@@ -37,13 +37,17 @@ domain.
 
 ## EmDash agent reference
 
-### Bundled skill (primary)
+### Bundled skills (primary)
 
-EmDash ships an official `building-emdash-site` agent skill, bundled into this
-template as `.agents/skills/building-emdash-site/SKILL.md` and version-pinned to
-the installed EmDash release (`emdash` 1.0.1 in `package.json`). It is the
-primary reference for EmDash work here: read it before editing queries, seeds,
-Portable Text rendering, menus, taxonomies, widgets, or deployment config.
+EmDash ships official agent skills from `emdash-cms/skills`, bundled into this
+template under `.agents/skills/` and refreshed by the EmDash updater alongside
+the installed release (`emdash` 1.3.1 in `package.json`). `skills-lock.json`
+records each skill's source and content hash. The primary reference for EmDash
+work here is `.agents/skills/building-emdash-site/SKILL.md`: read it before
+editing queries, seeds, Portable Text rendering, menus, taxonomies, widgets, or
+deployment config. The other bundled skills cover their own tasks:
+`upgrading-emdash` (package upgrades), `emdash-cli` (the `emdash` CLI),
+`creating-plugins`, and the two WordPress porting skills.
 
 Read `SKILL.md` first, then the reference it points to for the task at hand:
 
@@ -64,12 +68,23 @@ template, follow this repository's conventions and commands:
 Client discovery needs no extra install: Codex and OpenCode both scan
 `.agents/skills` directly, Claude Code discovers it through the committed
 `.claude/skills` symlink to `.agents/skills`, and this document also points
-agents at the same files. Edit the skill only under `.agents/skills`; the
-symlink cannot drift because it shares one target.
+agents at the same files. Do not hand-edit the skill files: the updater
+replaces them on every upgrade. The symlink cannot drift because it shares one
+target.
+
+### Upgrading EmDash
+
+Follow the `upgrading-emdash` skill, with these repository-specific rules:
+
+- Run `bunx upgrade-emdash@latest --dry-run`, then `bunx upgrade-emdash@latest`. It bumps `emdash` and `@emdash-cms/cloudflare` together (they must stay on the same version), refreshes `.agents/skills` and `skills-lock.json`, and writes the ignored work order `.emdash/UPGRADE.md`.
+- The updater deletes `.agents/skills/building-emdash-site/LICENSE`; restore it (`git checkout -- .agents/skills/building-emdash-site/LICENSE`), since the MIT notice must ship with the redistributed skill.
+- Run `bun run types:generate` and commit any change. The generator loads EmDash's internal type-generation chunk and fails loudly if a release moves it.
+- Verify with `bun run seed:validate`, `bun run check`, and `bun run smoke:worker`.
+- Deploy only with `bun run cf:deploy`, never the bare `wrangler deploy` the work order suggests, which would skip the Astro build.
 
 ### Live docs (supplement)
 
-The skill is pinned to 1.0.1, so for anything newer — release notes, changed
+The skills track the installed release, so for anything newer — release notes, changed
 APIs, new field types — consult the official documentation. Two project config
 files optionally declare the public `emdash-docs` docs MCP server, which is
 read-only and needs no token: `.mcp.json` for Claude Code and

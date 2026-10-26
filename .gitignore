@@ -19,3 +19,4 @@ node_modules/
 # Generated artifacts
 emdash-env.d.ts
 .emdash/migrations.json
+.emdash/UPGRADE.md
