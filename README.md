@@ -6,7 +6,7 @@
   <img alt="Minastro personal-site homepage with navigation, writing, and project sections" src="images/minastro-light.webp">
 </picture>
 
-A personal-site theme built with Astro and [EmDash](https://emdashcms.com), running server-side on Cloudflare Workers. EmDash is a Git-free CMS that stores your content in Cloudflare D1 and media in R2, so posts, projects, pages, and settings are all authored from the built-in admin at `/_emdash/admin`. Out of the box you get a blog, a project portfolio, CMS-managed pages, search, RSS, comments, and an optional newsletter.
+A personal-site theme built with Astro and [EmDash](https://emdashcms.com), running server-side on Cloudflare Workers. EmDash is a Git-free CMS that stores your content in Cloudflare D1 and media in R2, so posts, projects, pages, and settings are all authored from the built-in admin at `/_emdash/admin`. Out of the box you get a blog, a project portfolio, CMS-managed pages, search, RSS, comments, per-entry SEO controls, and an optional newsletter.
 
 ## Quick start
 
@@ -32,7 +32,7 @@ bun run cf:dev
 
 ## Make the site yours
 
-Content is edited in the admin. Sign in at `/_emdash/admin` to write posts and projects, add pages, and manage tags, comments, and site settings. Site identity (title, tagline, logo) and the primary navigation are owned by the CMS, not by the repository, so they are changed there.
+Content is edited in the admin. Sign in at `/_emdash/admin` to write posts and projects, add pages, and manage tags, comments, and site settings. Site identity (title, tagline, logo) and the primary navigation are owned by the CMS, not by the repository, so they are changed there. SEO is too: set a title, description, social image, canonical URL, or noindex on each post, project, and page in its SEO panel, and site-wide defaults (default social image, search engine verification, AI training opt-out) under **Settings > SEO**.
 
 The repository holds the rest:
 
@@ -86,6 +86,10 @@ Have ready: a Cloudflare account you can sign in to, a final HTTPS hostname (`ht
    ```
 
    Later deploys are `bun run cf:deploy`, which rebuilds the Astro SSR output before Wrangler runs. Never deploy with a bare `wrangler deploy`; it skips that build.
+
+### Updating EmDash
+
+Run `bunx upgrade-emdash@latest --dry-run`, then `bunx upgrade-emdash@latest`. It updates `emdash` and `@emdash-cms/cloudflare` together and refreshes the bundled agent skills. Then follow the upgrade steps in [AGENTS.md](AGENTS.md#upgrading-emdash): restore the skill's `LICENSE`, run `bun run types:generate`, and verify with `bun run check`. For a deployed site, take the backups in [docs/operations.md](docs/operations.md) before you deploy, and deploy with `bun run cf:deploy`.
 
 ### Analytics
 
